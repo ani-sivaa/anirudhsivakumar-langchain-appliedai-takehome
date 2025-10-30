@@ -1,0 +1,18 @@
+# Core
+langgraph>=0.2.27
+langchain>=0.2.16
+openai>=1.46.0
+pydantic>=2.9.2
+python-dotenv>=1.0.1
+
+# CLI & UX
+typer[all]>=0.12.5
+rich>=13.9.2
+
+# Repo & shell helpers
+GitPython>=3.1.43
+
+# Dev tools
+black>=24.8.0
+ruff>=0.6.9
+pytest>=8.3.3
