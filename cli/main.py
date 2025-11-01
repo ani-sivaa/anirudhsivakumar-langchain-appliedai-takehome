@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-# CLI entry point
-
-=======
 import uuid
 import typer
 from rich.console import Console
@@ -62,4 +58,3 @@ def main():
 
 if __name__ == "__main__":
     typer.run(main)
->>>>>>> 9e10a09 (Setup a basic agent for now that has Natural Language File Editing, Conversational Chat capability, Conversation Memory, using LangGraph's memorySaver (persistence capability), Intent Classification like whether or not the user wants to chat or edit files, and Conditional Routing which helps the agent route between chat and edit workflows.)
