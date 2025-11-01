@@ -32,4 +32,8 @@ class AgentState(TypedDict, total=False):
     memory_value: Dict
     memory_query: str
     
+    approval_required: bool
+    approval_request: Dict
+    approval_response: str
+    
     error: str
