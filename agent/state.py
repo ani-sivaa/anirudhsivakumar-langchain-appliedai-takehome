@@ -4,7 +4,7 @@ from operator import add
 
 class AgentState(TypedDict, total=False):
     user_input: str
-    response: str
+    response: Annotated[str, add]
     
     messages: Annotated[List[Dict[str, str]], add]
     
@@ -31,5 +31,10 @@ class AgentState(TypedDict, total=False):
     memory_key: str
     memory_value: Dict
     memory_query: str
+    
+    project_instruction: str
+    project_files: List[Dict[str, str]]
+    file_path: str
+    file_description: str
     
     error: str

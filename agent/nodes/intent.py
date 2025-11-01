@@ -19,7 +19,8 @@ def determine_intent(state: AgentState) -> Dict:
 
 Available actions:
 - "chat": General conversation, questions, greetings (DEFAULT for non-action queries)
-- "edit": Edit or create a file
+- "edit": Edit or create a single file
+- "project": Create multiple files (e.g., "create 5 files", "build a website", "scaffold a project")
 - "shell": Run a shell command
 - "review": Review code changes (PR review, code review, diff review)
 - "remember": Save information to long-term memory
@@ -32,9 +33,14 @@ IMPORTANT: Use "chat" for:
 - General conversation
 
 Use "edit" for:
-- Explicit file editing requests
+- Single file editing or creation
 - "write it to [filename]" or "save it as [filename]" when referring to previously discussed content
-- "create [filename]" requests
+- "edit [filename]" or "create [filename]" (single file)
+
+Use "project" for:
+- Creating multiple files at once
+- "create 5 files", "write multiple files", "build a website"
+- Any request that implies multiple files or a project structure
 
 Use "shell" for:
 - Command execution requests
@@ -57,6 +63,7 @@ When user says "write it" or "save it", look at conversation history to understa
 Extract relevant information:
 - For "chat": no additional fields needed
 - For "edit": extract path and edit_instruction (the content or instruction)
+- For "project": extract project_instruction (full description of what to create)
 - For "shell": extract command (the shell command to run)
 - For "review": extract base_branch and head_branch (optional, defaults to main and HEAD)
 - For "remember": extract memory_key (label) and memory_value (dict of info to save)
@@ -64,9 +71,10 @@ Extract relevant information:
 
 Respond with valid JSON only:
 {
-    "action": "chat|edit|shell|review|remember|recall",
+    "action": "chat|edit|project|shell|review|remember|recall",
     "path": "file path" (for edit),
     "edit_instruction": "what to write or change" (for edit),
+    "project_instruction": "full project description" (for project),
     "command": "shell command" (for shell),
     "base_branch": "branch name" (for review, optional),
     "head_branch": "branch name" (for review, optional),
@@ -79,9 +87,10 @@ Examples:
 - "what can you do?" → {"action": "chat"}
 - "run ls -la" → {"action": "shell", "command": "ls -la"}
 - "review this PR" → {"action": "review"}
+- "in the anew folder write 5 readme files" → {"action": "project", "project_instruction": "create 5 readme files with random info in the anew folder"}
+- "create a website with html css" → {"action": "project", "project_instruction": "create a website with html css"}
 - "remember my name is John" → {"action": "remember", "memory_key": "name", "memory_value": {"name": "John"}}
 - "what's my name?" → {"action": "recall", "memory_key": "name"}
-- "write it to anirudh's the goat.md" (after discussing content) → {"action": "edit", "path": "goat.md", "edit_instruction": "write the content from previous conversation"}
 - "add a fibonacci function to utils.py" → {"action": "edit", "path": "utils.py", "edit_instruction": "add a fibonacci function"}"""
 
         context_lines = []
@@ -139,6 +148,9 @@ Classify the intent and extract parameters as JSON:"""
         if "memory_value" in intent_data:
             result["memory_value"] = intent_data["memory_value"]
         
+        if "project_instruction" in intent_data:
+            result["project_instruction"] = intent_data["project_instruction"]
+        
         result["error"] = ""
         return result
         
@@ -153,6 +165,8 @@ def route_action(state: AgentState) -> str:
     
     if action == "edit":
         return "read_file"
+    elif action == "project":
+        return "project"
     elif action == "shell":
         return "shell"
     elif action == "review":
