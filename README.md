@@ -1,7 +1,7 @@
-####anirudhsivakumar-langchain-appliedai-takehome
+## anirudhsivakumar-langchain-appliedai-takehome
 
-##Built by **Anirudh Sivakumar**
-#Hi Palash & Brace! Thank you for giving me the opportunity to interview for LangChain, I hope you guys like and approve of what I've built!
+## Built by **Anirudh Sivakumar**
+# Hi Palash & Brace! Thank you for giving me the opportunity to interview for LangChain, I hope you guys like and approve of what I've built!
 
 ## My Approach
 
