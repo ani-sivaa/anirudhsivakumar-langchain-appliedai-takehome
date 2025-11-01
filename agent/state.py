@@ -15,4 +15,8 @@ class AgentState(TypedDict, total=False):
     edit_instruction: str
     modified_content: str
     
+    command: str
+    shell_output: str
+    return_code: int
+    
     error: str
