@@ -19,4 +19,12 @@ class AgentState(TypedDict, total=False):
     shell_output: str
     return_code: int
     
+    base_branch: str
+    head_branch: str
+    diffs: List[Dict[str, str]]
+    file: str
+    diff: str
+    review_comments: Annotated[List[str], add]
+    review_summary: str
+    
     error: str
