@@ -6,6 +6,7 @@ from agent.nodes.intent import determine_intent, route_action
 from agent.nodes.chat import chat_response
 from agent.nodes.file_io import read_file, write_file
 from agent.nodes.modify import modify_code
+from agent.nodes.shell import run_shell
 
 
 def create_graph():
@@ -16,6 +17,7 @@ def create_graph():
     graph.add_node("read_file", read_file)
     graph.add_node("modify_code", modify_code)
     graph.add_node("write_file", write_file)
+    graph.add_node("shell", run_shell)
     
     graph.add_edge(START, "determine_intent")
     
@@ -24,12 +26,13 @@ def create_graph():
         route_action,
         {
             "chat": "chat",
-            "edit": "read_file",
-            "end": END
+            "read_file": "read_file",
+            "shell": "shell"
         }
     )
     
     graph.add_edge("chat", END)
+    graph.add_edge("shell", END)
     
     graph.add_edge("read_file", "modify_code")
     graph.add_edge("modify_code", "write_file")
