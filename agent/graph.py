@@ -1,12 +1,3 @@
-<<<<<<< HEAD
-""" 
-Agent graph: this is where i'll define the nodes & edges of the agent.
-Some notes:
-I am planning to use serial & parallel nodes as well as conditional & reducer edges.
-I made this design decision because I want to make the Agent showcase all aspects of the
-LangGraph framework.
-"""
-=======
 from langgraph.graph import StateGraph, END, START
 from langgraph.checkpoint.memory import MemorySaver
 
@@ -49,4 +40,3 @@ def create_graph():
 
 
 agent_graph = create_graph()
->>>>>>> 9e10a09 (Setup a basic agent for now that has Natural Language File Editing, Conversational Chat capability, Conversation Memory, using LangGraph's memorySaver (persistence capability), Intent Classification like whether or not the user wants to chat or edit files, and Conditional Routing which helps the agent route between chat and edit workflows.)
