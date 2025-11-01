@@ -1,0 +1,25 @@
+# Virtualenv
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+dist/
+build/
+
+# Environment
+.env
+
+# Local context (never tracked)
+context/
+
+# Editors
+.cursor/
+
+# OS
+.DS_Store
+
