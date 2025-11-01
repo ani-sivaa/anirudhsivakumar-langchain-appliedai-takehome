@@ -1,4 +1,5 @@
-from langgraph.graph import StateGraph, END, START, Send
+from langgraph.graph import StateGraph, END, START
+from langgraph.types import Send
 from langgraph.checkpoint.memory import MemorySaver
 
 from agent.state import AgentState
@@ -10,6 +11,8 @@ from agent.nodes.shell import run_shell
 from agent.nodes.git import get_git_diff
 from agent.nodes.review import review_file
 from agent.nodes.summarize import summarize_review
+from agent.nodes.memory_ops import save_user_memory, recall_user_memory
+from agent.tools.memory import get_memory_store
 
 
 def fan_out_reviews(state: AgentState):
@@ -29,6 +32,8 @@ def create_graph():
     graph.add_node("get_git_diff", get_git_diff)
     graph.add_node("review_file", review_file)
     graph.add_node("summarize_review", summarize_review)
+    graph.add_node("save_memory", save_user_memory)
+    graph.add_node("recall_memory", recall_user_memory)
     
     graph.add_edge(START, "determine_intent")
     
@@ -39,12 +44,16 @@ def create_graph():
             "chat": "chat",
             "read_file": "read_file",
             "shell": "shell",
-            "review": "get_git_diff"
+            "review": "get_git_diff",
+            "remember": "save_memory",
+            "recall": "recall_memory"
         }
     )
     
     graph.add_edge("chat", END)
     graph.add_edge("shell", END)
+    graph.add_edge("save_memory", END)
+    graph.add_edge("recall_memory", END)
     
     graph.add_edge("read_file", "modify_code")
     graph.add_edge("modify_code", "write_file")
@@ -54,8 +63,9 @@ def create_graph():
     graph.add_edge("review_file", "summarize_review")
     graph.add_edge("summarize_review", END)
     
-    memory = MemorySaver()
-    return graph.compile(checkpointer=memory)
+    checkpointer = MemorySaver()
+    store = get_memory_store()
+    return graph.compile(checkpointer=checkpointer, store=store)
 
 
 agent_graph = create_graph()

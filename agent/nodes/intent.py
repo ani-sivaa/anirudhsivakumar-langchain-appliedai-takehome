@@ -22,6 +22,8 @@ Available actions:
 - "edit": Edit or create a file
 - "shell": Run a shell command
 - "review": Review code changes (PR review, code review, diff review)
+- "remember": Save information to long-term memory
+- "recall": Retrieve information from long-term memory
 
 IMPORTANT: Use "chat" for:
 - Questions (how, what, why, can you, etc.)
@@ -42,6 +44,14 @@ Use "review" for:
 - Code review requests
 - "review this PR", "review my changes", "check the diff"
 
+Use "remember" for:
+- Saving user preferences, facts, or project information
+- "remember my name is X", "save that I prefer Y", "remember this project uses Z"
+
+Use "recall" for:
+- Retrieving saved information
+- "what's my name?", "what do I prefer?", "what did I tell you about X?"
+
 When user says "write it" or "save it", look at conversation history to understand what content they're referring to.
 
 Extract relevant information:
@@ -49,15 +59,19 @@ Extract relevant information:
 - For "edit": extract path and edit_instruction (the content or instruction)
 - For "shell": extract command (the shell command to run)
 - For "review": extract base_branch and head_branch (optional, defaults to main and HEAD)
+- For "remember": extract memory_key (label) and memory_value (dict of info to save)
+- For "recall": extract memory_key (what to retrieve)
 
 Respond with valid JSON only:
 {
-    "action": "chat|edit|shell|review",
+    "action": "chat|edit|shell|review|remember|recall",
     "path": "file path" (for edit),
     "edit_instruction": "what to write or change" (for edit),
     "command": "shell command" (for shell),
     "base_branch": "branch name" (for review, optional),
-    "head_branch": "branch name" (for review, optional)
+    "head_branch": "branch name" (for review, optional),
+    "memory_key": "key label" (for remember/recall),
+    "memory_value": {"key": "value"} (for remember)
 }
 
 Examples:
@@ -65,7 +79,8 @@ Examples:
 - "what can you do?" → {"action": "chat"}
 - "run ls -la" → {"action": "shell", "command": "ls -la"}
 - "review this PR" → {"action": "review"}
-- "review my changes" → {"action": "review"}
+- "remember my name is John" → {"action": "remember", "memory_key": "name", "memory_value": {"name": "John"}}
+- "what's my name?" → {"action": "recall", "memory_key": "name"}
 - "write it to anirudh's the goat.md" (after discussing content) → {"action": "edit", "path": "goat.md", "edit_instruction": "write the content from previous conversation"}
 - "add a fibonacci function to utils.py" → {"action": "edit", "path": "utils.py", "edit_instruction": "add a fibonacci function"}"""
 
@@ -118,6 +133,12 @@ Classify the intent and extract parameters as JSON:"""
         if "head_branch" in intent_data:
             result["head_branch"] = intent_data["head_branch"]
         
+        if "memory_key" in intent_data:
+            result["memory_key"] = intent_data["memory_key"]
+        
+        if "memory_value" in intent_data:
+            result["memory_value"] = intent_data["memory_value"]
+        
         result["error"] = ""
         return result
         
@@ -136,5 +157,9 @@ def route_action(state: AgentState) -> str:
         return "shell"
     elif action == "review":
         return "review"
+    elif action == "remember":
+        return "remember"
+    elif action == "recall":
+        return "recall"
     
     return "chat"

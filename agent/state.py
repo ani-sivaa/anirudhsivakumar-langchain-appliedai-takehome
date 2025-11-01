@@ -27,4 +27,9 @@ class AgentState(TypedDict, total=False):
     review_comments: Annotated[List[str], add]
     review_summary: str
     
+    user_id: str
+    memory_key: str
+    memory_value: Dict
+    memory_query: str
+    
     error: str
