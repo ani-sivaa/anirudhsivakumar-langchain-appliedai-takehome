@@ -21,6 +21,7 @@ Available actions:
 - "chat": General conversation, questions, greetings (DEFAULT for non-action queries)
 - "edit": Edit or create a file
 - "shell": Run a shell command
+- "review": Review code changes (PR review, code review, diff review)
 
 IMPORTANT: Use "chat" for:
 - Questions (how, what, why, can you, etc.)
@@ -37,25 +38,34 @@ Use "shell" for:
 - Command execution requests
 - "run", "execute", "ls", "grep" or other shell commands
 
+Use "review" for:
+- Code review requests
+- "review this PR", "review my changes", "check the diff"
+
 When user says "write it" or "save it", look at conversation history to understand what content they're referring to.
 
 Extract relevant information:
 - For "chat": no additional fields needed
 - For "edit": extract path and edit_instruction (the content or instruction)
 - For "shell": extract command (the shell command to run)
+- For "review": extract base_branch and head_branch (optional, defaults to main and HEAD)
 
 Respond with valid JSON only:
 {
-    "action": "chat|edit|shell",
+    "action": "chat|edit|shell|review",
     "path": "file path" (for edit),
     "edit_instruction": "what to write or change" (for edit),
-    "command": "shell command" (for shell)
+    "command": "shell command" (for shell),
+    "base_branch": "branch name" (for review, optional),
+    "head_branch": "branch name" (for review, optional)
 }
 
 Examples:
 - "hello" → {"action": "chat"}
 - "what can you do?" → {"action": "chat"}
 - "run ls -la" → {"action": "shell", "command": "ls -la"}
+- "review this PR" → {"action": "review"}
+- "review my changes" → {"action": "review"}
 - "write it to anirudh's the goat.md" (after discussing content) → {"action": "edit", "path": "goat.md", "edit_instruction": "write the content from previous conversation"}
 - "add a fibonacci function to utils.py" → {"action": "edit", "path": "utils.py", "edit_instruction": "add a fibonacci function"}"""
 
@@ -102,6 +112,12 @@ Classify the intent and extract parameters as JSON:"""
         if "command" in intent_data:
             result["command"] = intent_data["command"]
         
+        if "base_branch" in intent_data:
+            result["base_branch"] = intent_data["base_branch"]
+        
+        if "head_branch" in intent_data:
+            result["head_branch"] = intent_data["head_branch"]
+        
         result["error"] = ""
         return result
         
@@ -118,5 +134,7 @@ def route_action(state: AgentState) -> str:
         return "read_file"
     elif action == "shell":
         return "shell"
+    elif action == "review":
+        return "review"
     
     return "chat"
