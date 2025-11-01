@@ -5,6 +5,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from agent.graph import agent_graph
+from agent.tools.checkpoint_manager import should_resume, get_resume_info
 
 
 console = Console()
@@ -19,7 +20,7 @@ def main():
         "Watch me think in real-time as I process your requests!",
         style="bright_cyan"
     )
-    subtitle = Text("Type 'exit' to quit | Ctrl+C to interrupt and save", style="bright_cyan")
+    subtitle = Text("Type 'exit' to quit | Ctrl+C to interrupt (auto-resumes on next message)", style="bright_cyan")
     
     console.print(Panel.fit(
         Text.assemble(title, "\n", description, "\n", subtitle),
@@ -49,9 +50,21 @@ def main():
         console.print()
         node_count = 0
         
+        # Check if we should resume from interrupted checkpoint
+        state = agent_graph.get_state(config)
+        is_resuming = should_resume(state)
+        
+        if is_resuming:
+            resume_info = get_resume_info(state)
+            console.print(f"[dim yellow]{resume_info}[/dim yellow]")
+        
         try:
+            # If resuming, pass None to continue from checkpoint
+            # Otherwise pass new user input
+            input_data = None if is_resuming else {"user_input": user_input}
+            
             for event in agent_graph.stream(
-                {"user_input": user_input},
+                input_data,
                 config=config,
                 stream_mode="updates"
             ):
@@ -73,10 +86,8 @@ def main():
             console.print()
         
         except KeyboardInterrupt:
-            console.print("\n\n[yellow]⚠ Interrupted! Session saved at checkpoint.[/yellow]")
-            state = agent_graph.get_state(config)
-            console.print(f"[cyan]Session ID: {session_id}[/cyan]")
-            console.print("[dim]Continue by restarting - your conversation is saved![/dim]\n")
+            console.print("\n\n[yellow]⚠ Interrupted! Checkpoint saved.[/yellow]")
+            console.print("[dim]Type anything to resume from where you left off[/dim]\n")
         
         except Exception as e:
             console.print(f"[bold red]Error: {e}[/bold red]")
