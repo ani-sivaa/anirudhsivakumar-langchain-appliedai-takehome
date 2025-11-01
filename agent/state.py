@@ -1,5 +1,18 @@
-"""
-Agent state management: this is where i'll define the state of the agent which is bascially 
-the memory of the agent and other data that the agent needs to remember. Also this is where I'll
-configure how parallel nodes will merge (ex: reducers).
-"""
+from typing import TypedDict, Annotated, List, Dict
+from operator import add
+
+
+class AgentState(TypedDict, total=False):
+    user_input: str
+    response: str
+    
+    messages: Annotated[List[Dict[str, str]], add]
+    
+    action: str
+    
+    path: str
+    content: str
+    edit_instruction: str
+    modified_content: str
+    
+    error: str
