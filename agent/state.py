@@ -1,5 +1,13 @@
-from typing import TypedDict, Annotated, List, Dict
+from typing import TypedDict, Annotated, List, Dict, Any
 from operator import add
+
+
+def merge_dicts(existing: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]:
+    if existing is None:
+        return new
+    if new is None:
+        return existing
+    return {**existing, **new}
 
 
 class AgentState(TypedDict, total=False):
@@ -14,6 +22,11 @@ class AgentState(TypedDict, total=False):
     content: str
     edit_instruction: str
     modified_content: str
+    
+    paths: List[str]
+    contents: Annotated[Dict[str, str], merge_dicts]
+    modifications: Annotated[Dict[str, str], merge_dicts]
+    edit_results: Annotated[List[str], add]
     
     command: str
     shell_output: str

@@ -50,3 +50,58 @@ def write_file(state: AgentState) -> Dict:
         
     except Exception as e:
         return {"error": f"Error writing file {path}: {str(e)}"}
+
+
+def read_file_multi(state: AgentState) -> Dict:
+    path = state.get("path", "")
+    
+    if not path:
+        return {"error": "No file path specified for multi-read"}
+    
+    try:
+        file_path = Path(path)
+        
+        if not file_path.exists():
+            return {"error": f"File not found: {path}"}
+        
+        if not file_path.is_file():
+            return {"error": f"Not a file: {path}"}
+        
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        
+        return {"contents": {path: content}, "error": ""}
+        
+    except Exception as e:
+        return {"error": f"Error reading file {path}: {str(e)}"}
+
+
+def write_file_multi(state: AgentState) -> Dict:
+    path = state.get("path", "")
+    modifications = state.get("modifications", {})
+    
+    if not path:
+        return {"error": "No file path specified for multi-write"}
+    
+    if path not in modifications:
+        return {"error": f"No modified content found for {path}"}
+    
+    content = modifications[path]
+    
+    try:
+        file_path = Path(path)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        
+        return {
+            "edit_results": [f"✓ {path}"],
+            "error": ""
+        }
+        
+    except Exception as e:
+        return {
+            "edit_results": [f"✗ {path}: {str(e)}"],
+            "error": f"Error writing file {path}: {str(e)}"
+        }
