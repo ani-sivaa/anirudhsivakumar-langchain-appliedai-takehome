@@ -12,6 +12,7 @@ from agent.nodes.git import get_git_diff
 from agent.nodes.review import review_file
 from agent.nodes.summarize import summarize_review
 from agent.nodes.memory_ops import save_user_memory, recall_user_memory
+from agent.nodes.project import plan_project, create_project_file, summarize_project
 from agent.nodes.approval import check_approval_needed, request_approval, route_approval, route_after_approval, handle_denial
 from agent.tools.memory import get_memory_store
 
@@ -19,6 +20,11 @@ from agent.tools.memory import get_memory_store
 def fan_out_reviews(state: AgentState):
     diffs = state.get("diffs", [])
     return [Send("review_file", {"file": d["file"], "diff": d["diff"]}) for d in diffs]
+
+
+def fan_out_project_files(state: AgentState):
+    files = state.get("project_files", [])
+    return [Send("create_file", {"file_path": f["path"], "file_description": f["description"]}) for f in files]
 
 
 def create_graph():
@@ -38,6 +44,9 @@ def create_graph():
     graph.add_node("summarize_review", summarize_review)
     graph.add_node("save_memory", save_user_memory)
     graph.add_node("recall_memory", recall_user_memory)
+    graph.add_node("plan_project", plan_project)
+    graph.add_node("create_file", create_project_file)
+    graph.add_node("summarize_project", summarize_project)
     
     graph.add_edge(START, "determine_intent")
     graph.add_edge("determine_intent", "check_approval")
@@ -52,19 +61,7 @@ def create_graph():
             "review": "get_git_diff",
             "remember": "save_memory",
             "recall": "recall_memory",
-            "request_approval": "request_approval"
-        }
-    )
-    
-    graph.add_conditional_edges(
-        "request_approval",
-        route_after_approval,
-        {
-            "chat": "chat",
-            "shell": "shell",
-            "read_file": "read_file",
-            "review": "get_git_diff",
-            "denied": "denied"
+            "project": "plan_project"
         }
     )
     
@@ -81,6 +78,10 @@ def create_graph():
     graph.add_conditional_edges("get_git_diff", fan_out_reviews, ["review_file"])
     graph.add_edge("review_file", "summarize_review")
     graph.add_edge("summarize_review", END)
+    
+    graph.add_conditional_edges("plan_project", fan_out_project_files, ["create_file"])
+    graph.add_edge("create_file", "summarize_project")
+    graph.add_edge("summarize_project", END)
     
     checkpointer = MemorySaver()
     store = get_memory_store()
