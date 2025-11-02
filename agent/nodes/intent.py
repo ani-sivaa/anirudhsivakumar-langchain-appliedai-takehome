@@ -20,7 +20,8 @@ def determine_intent(state: AgentState) -> Dict:
 Available actions:
 - "chat": General conversation, questions, greetings (DEFAULT for non-action queries)
 - "edit": Edit or create a single file
-- "project": Create multiple files (e.g., "create 5 files", "build a website", "scaffold a project")
+- "edit_multi": Edit multiple EXISTING files (e.g., "add type hints to utils.py and main.py")
+- "project": Create multiple NEW files (e.g., "create 5 files", "build a website", "scaffold a project")
 - "shell": Run a shell command
 - "review": Review code changes (PR review, code review, diff review)
 - "remember": Save information to long-term memory
@@ -37,10 +38,16 @@ Use "edit" for:
 - "write it to [filename]" or "save it as [filename]" when referring to previously discussed content
 - "edit [filename]" or "create [filename]" (single file)
 
+Use "edit_multi" for:
+- Editing multiple existing files with the same instruction
+- "add type hints to utils.py, main.py, and helpers.py"
+- "refactor file1.py and file2.py"
+- "update logging in all these files: a.py, b.py, c.py"
+
 Use "project" for:
-- Creating multiple files at once
+- Creating multiple NEW files from scratch
 - "create 5 files", "write multiple files", "build a website"
-- Any request that implies multiple files or a project structure
+- "scaffold a Python project"
 
 Use "shell" for:
 - Command execution requests
@@ -63,6 +70,7 @@ When user says "write it" or "save it", look at conversation history to understa
 Extract relevant information:
 - For "chat": no additional fields needed
 - For "edit": extract path and edit_instruction (the content or instruction)
+- For "edit_multi": extract paths (array of file paths) and edit_instruction (what to change)
 - For "project": extract project_instruction (full description of what to create)
 - For "shell": extract command (the shell command to run)
 - For "review": extract base_branch and head_branch (optional, defaults to main and HEAD)
@@ -71,9 +79,10 @@ Extract relevant information:
 
 Respond with valid JSON only:
 {
-    "action": "chat|edit|project|shell|review|remember|recall",
+    "action": "chat|edit|edit_multi|project|shell|review|remember|recall",
     "path": "file path" (for edit),
-    "edit_instruction": "what to write or change" (for edit),
+    "paths": ["file1.py", "file2.py"] (for edit_multi),
+    "edit_instruction": "what to write or change" (for edit or edit_multi),
     "project_instruction": "full project description" (for project),
     "command": "shell command" (for shell),
     "base_branch": "branch name" (for review, optional),
@@ -87,11 +96,13 @@ Examples:
 - "what can you do?" → {"action": "chat"}
 - "run ls -la" → {"action": "shell", "command": "ls -la"}
 - "review this PR" → {"action": "review"}
+- "add a fibonacci function to utils.py" → {"action": "edit", "path": "utils.py", "edit_instruction": "add a fibonacci function"}
+- "add type hints to utils.py and main.py" → {"action": "edit_multi", "paths": ["utils.py", "main.py"], "edit_instruction": "add type hints"}
+- "refactor logging in file1.py, file2.py, file3.py" → {"action": "edit_multi", "paths": ["file1.py", "file2.py", "file3.py"], "edit_instruction": "refactor logging"}
 - "in the anew folder write 5 readme files" → {"action": "project", "project_instruction": "create 5 readme files with random info in the anew folder"}
 - "create a website with html css" → {"action": "project", "project_instruction": "create a website with html css"}
 - "remember my name is John" → {"action": "remember", "memory_key": "name", "memory_value": {"name": "John"}}
-- "what's my name?" → {"action": "recall", "memory_key": "name"}
-- "add a fibonacci function to utils.py" → {"action": "edit", "path": "utils.py", "edit_instruction": "add a fibonacci function"}"""
+- "what's my name?" → {"action": "recall", "memory_key": "name"}"""
 
         context_lines = []
         if messages:
@@ -130,6 +141,9 @@ Classify the intent and extract parameters as JSON:"""
         if "path" in intent_data:
             result["path"] = intent_data["path"]
         
+        if "paths" in intent_data:
+            result["paths"] = intent_data["paths"]
+        
         if "edit_instruction" in intent_data:
             result["edit_instruction"] = intent_data["edit_instruction"]
         
@@ -165,6 +179,8 @@ def route_action(state: AgentState) -> str:
     
     if action == "edit":
         return "read_file"
+    elif action == "edit_multi":
+        return "edit_multi"
     elif action == "project":
         return "project"
     elif action == "shell":

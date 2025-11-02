@@ -82,3 +82,57 @@ Provide the complete file content:"""
         
     except Exception as e:
         return {"error": f"Error modifying code: {str(e)}"}
+
+
+def modify_code_multi(state: AgentState) -> Dict:
+    path = state.get("path", "")
+    contents = state.get("contents", {})
+    instruction = state.get("edit_instruction", "")
+    
+    if not path:
+        return {"error": "No file path provided for multi-modify"}
+    
+    if not instruction:
+        return {"error": "No edit instruction provided"}
+    
+    if path not in contents:
+        return {"error": f"No content found for {path}"}
+    
+    content = contents[path]
+    
+    try:
+        llm = get_llm()
+        
+        system_prompt = """You are an expert code editor. Modify code according to the user's instructions.
+
+Guidelines:
+- Follow the instruction precisely
+- Maintain code style and formatting
+- Preserve functionality unless asked to change it
+- Return ONLY the complete modified code, no explanations or markdown"""
+
+        user_prompt = f"""File: {path}
+
+Current content:
+```
+{content}
+```
+
+Instruction: {instruction}
+
+Provide the complete modified file content:"""
+
+        modified_content = llm.invoke(prompt=user_prompt, system_prompt=system_prompt)
+        
+        modified_content = modified_content.strip()
+        if modified_content.startswith("```"):
+            lines = modified_content.split("\n")
+            lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            modified_content = "\n".join(lines)
+        
+        return {"modifications": {path: modified_content}, "error": ""}
+        
+    except Exception as e:
+        return {"error": f"Error modifying code for {path}: {str(e)}"}
