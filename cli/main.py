@@ -6,6 +6,7 @@ from rich.text import Text
 
 from agent.graph import agent_graph
 from agent.tools.checkpoint_manager import should_resume, get_resume_info
+from agent.tools.memory import get_memory_stats
 
 
 console = Console()
@@ -26,6 +27,13 @@ def main():
         Text.assemble(title, "\n", description, "\n", subtitle),
         border_style="bright_magenta"
     ))
+    
+    memory_stats = get_memory_stats()
+    if memory_stats.get("persistent"):
+        console.print(f"[dim green]💾 Long-term memory: SQLite ({memory_stats.get('db_path')})[/dim green]")
+        console.print(f"[dim green]   {memory_stats.get('total_entries', 0)} entries, {memory_stats.get('total_namespaces', 0)} namespaces[/dim green]")
+    else:
+        console.print(f"[dim yellow]⚠️  Long-term memory: In-memory (data lost on restart)[/dim yellow]")
     
     session_id = str(uuid.uuid4())
     config = {"configurable": {"thread_id": session_id}}
