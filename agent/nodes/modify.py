@@ -2,6 +2,7 @@ from typing import Dict
 
 from agent.state import AgentState
 from agent.tools.llm import get_llm
+from agent.tools.validation import validate_python_syntax, should_validate_syntax
 
 
 def modify_code(state: AgentState) -> Dict:
@@ -78,6 +79,11 @@ Provide the complete file content:"""
                 lines = lines[:-1]
             modified_content = "\n".join(lines)
         
+        if should_validate_syntax(path):
+            syntax_error = validate_python_syntax(modified_content)
+            if syntax_error:
+                return {"error": f"Generated code has syntax error: {syntax_error}"}
+        
         return {"modified_content": modified_content, "error": ""}
         
     except Exception as e:
@@ -131,6 +137,11 @@ Provide the complete modified file content:"""
             if lines and lines[-1].strip() == "```":
                 lines = lines[:-1]
             modified_content = "\n".join(lines)
+        
+        if should_validate_syntax(path):
+            syntax_error = validate_python_syntax(modified_content)
+            if syntax_error:
+                return {"error": f"Generated code has syntax error: {syntax_error}"}
         
         return {"modifications": {path: modified_content}, "error": ""}
         

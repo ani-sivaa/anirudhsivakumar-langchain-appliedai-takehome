@@ -4,19 +4,25 @@ from typing import Dict, Any
 
 def is_dangerous_command(command: str) -> bool:
     dangerous_patterns = [
-        r'\brm\b.*-rf',
-        r'\brm\b.*-fr',
+        r'\brm\b.*-[rf]+',
+        r'\brm\b.*-[fr]+',
         r'\bdd\b',
         r'\bmkfs\b',
         r'>\s*/dev/',
-        r'\bcurl\b.*\|\s*sh',
-        r'\bwget\b.*\|\s*sh',
+        r'\bcurl\b.*\|\s*(sh|bash)',
+        r'\bwget\b.*\|\s*(sh|bash)',
         r'\bsudo\b',
         r'\bchown\b.*-R',
         r'\bchmod\b.*-R',
+        r'\bchmod\b.*777',
         r'\bgit\b.*push.*--force',
         r'\bgit\b.*reset.*--hard',
         r'\bdocker\b.*rm',
+        r'\bnpm\b.*install.*-g',
+        r'\bpip\b.*install.*--break-system-packages',
+        r';.*rm\b',
+        r'\&\&.*rm\b',
+        r'\|.*rm\b',
     ]
     
     for pattern in dangerous_patterns:

@@ -3,6 +3,7 @@ from typing import Dict
 
 from agent.state import AgentState
 from agent.tools.llm import get_llm
+from agent.tools.parsing import safe_json_parse
 
 
 def determine_intent(state: AgentState) -> Dict:
@@ -124,17 +125,7 @@ Current user request: {user_input}
 Classify the intent and extract parameters as JSON:"""
 
         response = llm.invoke(prompt=user_prompt, system_prompt=system_prompt)
-        
-        response = response.strip()
-        if response.startswith("```json"):
-            response = response[7:]
-        if response.startswith("```"):
-            response = response[3:]
-        if response.endswith("```"):
-            response = response[:-3]
-        response = response.strip()
-        
-        intent_data = json.loads(response)
+        intent_data = safe_json_parse(response, default={"action": "chat"})
         
         result = {"action": intent_data.get("action", "chat")}
         

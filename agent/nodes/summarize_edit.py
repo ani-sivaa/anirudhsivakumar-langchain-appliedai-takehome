@@ -17,18 +17,24 @@ def summarize_multi_edit(state: AgentState) -> Dict:
     success_count = sum(1 for r in edit_results if r.startswith("✓"))
     failure_count = sum(1 for r in edit_results if r.startswith("✗"))
     
-    summary_lines = [f"Edited {len(paths)} file(s):"]
+    summary_lines = [f"Multi-file edit complete: {len(paths)} file(s) processed"]
+    summary_lines.append("")
+    
     for result in edit_results:
         summary_lines.append(result)
     
     if failure_count > 0:
-        summary_lines.append(f"\n{success_count} succeeded, {failure_count} failed")
+        summary_lines.append(f"\nResults: {success_count} succeeded, {failure_count} failed")
+        error_msg = "Some files failed to update"
+    else:
+        summary_lines.append(f"\nAll {success_count} files updated successfully")
+        error_msg = ""
     
     summary = "\n".join(summary_lines)
     
     return {
         "response": summary,
-        "error": "",
+        "error": error_msg,
         "messages": [{"role": "assistant", "content": summary}]
     }
 

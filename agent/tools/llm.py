@@ -1,4 +1,5 @@
 import os
+import time
 from typing import Optional, Any
 
 from dotenv import load_dotenv
@@ -6,6 +7,17 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 load_dotenv()
+
+
+def retry_with_backoff(func, max_retries=3, initial_delay=1.0):
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except Exception as e:
+            if attempt == max_retries - 1:
+                raise
+            delay = initial_delay * (2 ** attempt)
+            time.sleep(delay)
 
 
 class LLMWrapper:
@@ -32,8 +44,11 @@ class LLMWrapper:
         
         messages.append(HumanMessage(content=prompt))
         
-        response = self.llm.invoke(messages, **kwargs)
-        return response.content
+        def _invoke():
+            response = self.llm.invoke(messages, **kwargs)
+            return response.content
+        
+        return retry_with_backoff(_invoke, max_retries=3, initial_delay=1.0)
 
 
 _default_llm: Optional[LLMWrapper] = None
