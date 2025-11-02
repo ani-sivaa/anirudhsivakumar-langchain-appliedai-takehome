@@ -17,6 +17,12 @@ build/
 # Local context (never tracked)
 context/
 
+# Data & Databases
+data/
+*.db
+*.sqlite
+*.sqlite3
+
 # Editors
 .cursor/
 
