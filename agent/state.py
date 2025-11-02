@@ -49,5 +49,8 @@ class AgentState(TypedDict, total=False):
     project_files: List[Dict[str, str]]
     file_path: str
     file_description: str
+    approval_required: bool
+    approval_request: Dict
+    approval_response: str
     
     error: str

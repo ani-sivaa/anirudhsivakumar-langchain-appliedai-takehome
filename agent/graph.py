@@ -97,6 +97,7 @@ def create_graph():
             "read_file": "read_file",
             "edit_multi": "edit_multi",
             "shell": "shell",
+            "read_file": "read_file",
             "review": "get_git_diff",
             "remember": "save_memory",
             "recall": "recall_memory",
