@@ -1,6 +1,7 @@
 from typing import Dict
 from agent.state import AgentState
 from agent.tools.memory import save_memory, get_memory, search_memories
+from agent.tools.llm import get_llm
 
 
 def save_user_memory(state: AgentState) -> Dict:
@@ -24,6 +25,7 @@ def save_user_memory(state: AgentState) -> Dict:
 def recall_user_memory(state: AgentState) -> Dict:
     memory_key = state.get("memory_key", "")
     user_id = state.get("user_id", "default_user")
+    user_input = state.get("user_input", "")
     
     if not memory_key:
         return {"error": "No memory key provided"}
@@ -31,16 +33,42 @@ def recall_user_memory(state: AgentState) -> Dict:
     namespace = ("users", user_id)
     memory = get_memory(namespace, memory_key)
     
-    if memory:
-        content = f"Found memory '{memory_key}': {memory}"
-    else:
-        content = f"No memory found for '{memory_key}'"
+    if not memory:
+        content = f"I don't have any memory saved for '{memory_key}'"
+        return {
+            "response": content,
+            "messages": [{"role": "assistant", "content": content}],
+            "error": ""
+        }
     
-    return {
-        "response": content,
-        "messages": [{"role": "assistant", "content": content}],
-        "error": ""
-    }
+    try:
+        llm = get_llm(temperature=0.7)
+        
+        system_prompt = """You are Jarvis, a helpful coding assistant. Generate a natural, conversational response based on the retrieved memory.
+
+Be friendly and concise. Answer the user's question naturally without just dumping the raw data."""
+
+        user_prompt = f"""User asked: {user_input}
+
+Retrieved memory: {memory}
+
+Generate a natural response:"""
+        
+        content = llm.invoke(prompt=user_prompt, system_prompt=system_prompt)
+        
+        return {
+            "response": content,
+            "messages": [{"role": "assistant", "content": content}],
+            "error": ""
+        }
+    
+    except Exception as e:
+        fallback = f"I found this: {memory}"
+        return {
+            "response": fallback,
+            "messages": [{"role": "assistant", "content": fallback}],
+            "error": ""
+        }
 
 
 def search_user_memories(state: AgentState) -> Dict:

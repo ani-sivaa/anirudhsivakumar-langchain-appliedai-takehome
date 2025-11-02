@@ -13,7 +13,7 @@ console = Console()
 
 
 def main():
-    title = Text("Anirudh's Jarvis (Coding Agent that uses the LangGraph framework)", style="bold magenta blink")
+    title = Text("Anicode(A coding Agent that uses the LangGraph framework)", style="bold magenta blink")
     
     description = Text(
         "Hey Brace & Palash! This agent can edit files, have conversations about code, and answer questions.\n"
