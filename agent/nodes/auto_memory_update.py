@@ -74,7 +74,8 @@ def recall_project_context(state: AgentState) -> AgentState:
         
         if items:
             latest = items[0]  # Most recent
-            context = latest.value
+            # Handle both Item objects and dict results
+            context = latest.value if hasattr(latest, 'value') else latest
             
             response = f"""
 Project Context (from memory):
