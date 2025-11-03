@@ -19,7 +19,8 @@ from agent.nodes.memory_ops import save_user_memory, recall_user_memory
 from agent.nodes.project import plan_project, create_project_file, summarize_project
 from agent.nodes.approval import check_approval_needed, request_approval, route_approval, route_after_approval, handle_denial
 from agent.nodes.auto_memory_update import auto_update_project_memory, recall_project_context
-from agent.nodes.codebase_ops import index_codebase_node, search_codebase_node
+from agent.nodes.codebase_ops import index_codebase_node
+from agent.nodes.smart_search import smart_search_codebase
 from agent.tools.memory import get_memory_store
 
 
@@ -112,7 +113,7 @@ def create_graph():
     graph.add_node("auto_memory", auto_update_project_memory)
     graph.add_node("project_context", recall_project_context)
     graph.add_node("index_codebase", index_codebase_node)
-    graph.add_node("search_codebase", search_codebase_node)
+    graph.add_node("search_codebase", smart_search_codebase)
     
     graph.add_edge(START, "determine_intent")
     graph.add_edge("determine_intent", "check_approval")

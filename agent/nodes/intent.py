@@ -38,10 +38,13 @@ Available actions:
 - "search_codebase": Search through indexed codebase
 
 IMPORTANT: Use "chat" for:
-- Questions (how, what, why, can you, etc.)
 - Greetings (hello, hi, hey)
-- Clarifications
-- General conversation
+- General conversation about non-code topics
+
+Use "search_codebase" for:
+- Questions about the codebase (how, what, why, where, etc.)
+- "how did we implement X?", "where is Y defined?", "what does this project do?"
+- "explain the memory system", "how does authentication work?"
 
 Use "edit" for:
 - Single file editing or creation
@@ -89,8 +92,10 @@ Use "index_codebase" for:
 - "index the codebase", "scan my code", "index all files"
 
 Use "search_codebase" for:
-- Searching through code content
-- "find files that handle authentication", "search for database logic", "what files use LangGraph?"
+- ANY questions about the codebase, code functionality, or what the project does
+- "what does this project do?", "tell me about the codebase", "how does X work?"
+- "where is the graph defined?", "find authentication code", "explain memory implementation"
+- "what files use LangGraph?", "how did we implement Y?"
 
 When user says "write it" or "save it", look at conversation history to understand what content they're referring to.
 
@@ -121,7 +126,7 @@ Respond with valid JSON only:
 
 Examples:
 - "hello" → {"action": "chat"}
-- "what can you do?" → {"action": "chat"}
+- "how are you?" → {"action": "chat"}
 - "run ls -la" → {"action": "shell", "command": "ls -la"}
 - "install numpy" → {"action": "install", "package_to_install": "numpy"}
 - "review this PR" → {"action": "review"}
@@ -136,7 +141,11 @@ Examples:
 - "what files exist in this project?" → {"action": "project_context"}
 - "show me the project structure" → {"action": "project_context"}
 - "index the codebase" → {"action": "index_codebase"}
-- "search for authentication code" → {"action": "search_codebase"}
+- "what does this project do?" → {"action": "search_codebase"}
+- "tell me about the codebase" → {"action": "search_codebase"}
+- "where is the graph defined?" → {"action": "search_codebase"}
+- "how did we implement memory?" → {"action": "search_codebase"}
+- "explain the authentication code" → {"action": "search_codebase"}
 
 IMPORTANT: When user says "these files" or "those files" or "all files", look at the recent conversation context to find which specific files they're referring to. Extract the actual file paths from previous messages."""
         
