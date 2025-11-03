@@ -192,7 +192,9 @@ def create_graph():
     graph.add_edge("install", "shell")  # Retry the command after install
     
     # Persistent checkpointing - survives restarts, enables time travel
-    checkpointer = SqliteSaver.from_conn_string("data/checkpoints.db")
+    import sqlite3
+    conn = sqlite3.connect("data/checkpoints.db", check_same_thread=False)
+    checkpointer = SqliteSaver(conn)
     store = get_memory_store()
     return graph.compile(checkpointer=checkpointer, store=store)
 
