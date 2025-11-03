@@ -82,6 +82,20 @@ def create_graph():
     """
     Builds the main LangGraph StateGraph with all nodes and edges.
     This is where the magic happens - defines all the workflows and how they connect.
+    
+    DESIGN DECISION: Why a graph-based architecture?
+    - Visual: Can literally draw the workflow on a whiteboard
+    - Debuggable: See exactly which node failed and why
+    - Extensible: Add new workflows without touching existing ones
+    - Parallel-friendly: Send() makes fan-out trivial
+    - Persistent: Checkpoints let you pause/resume/rewind anywhere
+    
+    DESIGN DECISION: Why separate nodes instead of one big function?
+    - Pure functions are testable (52+ tests prove this)
+    - Each node does ONE thing well
+    - Parallel execution becomes possible (review 10 files at once)
+    - Can interrupt between nodes for human approval
+    - State is explicit, not hidden in closures
     """
     graph = StateGraph(AgentState)
     
@@ -117,6 +131,10 @@ def create_graph():
     graph.add_node("index_codebase", index_codebase_node)
     graph.add_node("search_codebase", smart_search_codebase)
     
+    # DESIGN DECISION: Why reset_state first?
+    # The 'add' reducer on response/edit_results is needed for parallel nodes,
+    # but causes responses to chain across different user requests.
+    # Reset clears accumulated fields while preserving conversation history.
     graph.add_edge(START, "reset_state")
     graph.add_edge("reset_state", "determine_intent")
     graph.add_edge("determine_intent", "check_approval")
@@ -174,7 +192,11 @@ def create_graph():
     graph.add_edge("write_file", "auto_memory")
     graph.add_edge("auto_memory", END)
     
-    # Multi-file edit: single fan-out per stage, not per node
+    # DESIGN DECISION: Multi-file editing with controlled parallel execution
+    # Could do nested Send() but that causes exponential fan-out (N files → N² nodes)
+    # Instead: Stages with passthrough collection nodes between each fan-out
+    # Stage 1: fan-out reads → collect → Stage 2: fan-out modifies → collect → Stage 3: fan-out writes
+    # This keeps it linear: O(N) nodes instead of O(N²)
     graph.add_conditional_edges("edit_multi", fan_out_read_multi, ["read_file_multi"])
     graph.add_edge("read_file_multi", "edit_multi_modify")  # Collect all reads first
     graph.add_conditional_edges("edit_multi_modify", fan_out_modify_multi, ["modify_code_multi"])
@@ -193,7 +215,11 @@ def create_graph():
     graph.add_edge("summarize_project", "auto_memory")
     graph.add_edge("auto_memory", END)
     
-    # Auto-heal loop: shell → (check if retry needed) → prepare_retry → install → shell (retry)
+    # DESIGN DECISION: Auto-heal loop with cycle protection
+    # Shell commands can fail due to missing packages (ModuleNotFoundError)
+    # Instead of failing, we detect the package, install it, and retry
+    # retry_count prevents infinite loops - only retry once
+    # This makes the agent resilient without user intervention
     def route_shell_result(state: AgentState) -> str:
         """Decides whether to retry shell command with package install or end."""
         if should_retry_with_install(state):
@@ -202,12 +228,21 @@ def create_graph():
     
     graph.add_conditional_edges("shell", route_shell_result, {"prepare_retry": "prepare_retry", "end_shell": END})
     graph.add_edge("prepare_retry", "install")
-    graph.add_edge("install", "shell")  # Retry the command after install
+    graph.add_edge("install", "shell")  # Creates a loop! But retry_count prevents infinite cycles
     
-    # Persistent checkpointing - survives restarts, enables time travel
+    # DESIGN DECISION: SqliteSaver vs MemorySaver
+    # MemorySaver = in-memory, fast, but lost on restart
+    # SqliteSaver = on-disk, durable, enables time travel
+    # check_same_thread=False allows async operations
+    # Production-ready: can resume after crashes, rewind to previous states
     import sqlite3
     conn = sqlite3.connect("data/checkpoints.db", check_same_thread=False)
     checkpointer = SqliteSaver(conn)
+    
+    # DESIGN DECISION: Two types of persistence
+    # checkpointer = workflow execution state (short-term, per-session)
+    # store = facts and knowledge (long-term, forever)
+    # This separation keeps concerns clean and storage efficient
     store = get_memory_store()
     return graph.compile(checkpointer=checkpointer, store=store)
 

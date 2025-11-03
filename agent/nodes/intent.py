@@ -1,3 +1,19 @@
+"""
+Intent classification - the routing brain of the agent.
+
+DESIGN DECISION: Why use LLM for intent classification?
+- Could use regex/keywords, but natural language is fuzzy
+- "add type hints" vs "annotate with types" - same intent, different words
+- LLM handles variations, typos, context references
+- Trade-off: Costs a token call, but makes UX way better
+
+DESIGN DECISION: Why extract parameters here instead of in action nodes?
+- DRY: Don't repeat "extract file path" logic in every node
+- Centralized: All routing logic in one place
+- Debuggable: Can see intent + params in one checkpoint
+- Makes action nodes simpler - they just execute
+"""
+
 import json
 from typing import Dict
 

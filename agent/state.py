@@ -17,7 +17,17 @@ def merge_dicts(existing: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]
 class AgentState(TypedDict, total=False):
     """
     The brain of the agent - stores everything happening during execution.
-    total=False means nodes only update fields they care about, not all 40.
+    
+    DESIGN DECISION: total=False is critical
+    - Nodes only specify fields they change (not all 40+)
+    - Makes the code cleaner - no need to pass entire state through every node
+    - LangGraph merges updates automatically
+    
+    DESIGN DECISION: Why Annotated with reducers?
+    - Parallel nodes would conflict writing to same field
+    - 'add' reducer lets multiple nodes append (think: fan-out write results)
+    - 'merge_dicts' lets parallel nodes add different keys to same dict
+    - Without reducers, you'd get "can receive only one value per step" errors
     """
     
     # === USER I/O ===

@@ -1,6 +1,18 @@
 """
 State reset node - cleans up accumulated state between user requests.
 Prevents response chaining and context pollution.
+
+DESIGN DECISION: Why reset state between requests?
+- Reducers (add, merge_dicts) accumulate values within a request
+- This is GOOD for parallel nodes ("SUCCESS: file1" + "SUCCESS: file2")
+- But BAD across requests (would show "Project created" + "Edited file" + "Current response")
+- Solution: Reset accumulated fields, keep conversation history
+- Trade-off: Small overhead (one extra node) for clean outputs
+
+DESIGN DECISION: What gets reset vs preserved?
+- KEEP: messages (full conversation), user_input, user_id
+- CLEAR: response, edit_results, contents, modifications, approvals
+- Logic: Keep what's conversational, clear what's operational
 """
 
 from agent.state import AgentState
