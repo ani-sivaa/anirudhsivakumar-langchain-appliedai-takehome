@@ -18,13 +18,13 @@ def auto_update_project_memory(state: AgentState) -> AgentState:
     - Project structure
     - Key files and their purposes
     
-    Silent operation - doesn't add to response unless there's an issue.
+    Silent operation - returns empty dict to avoid polluting response.
     """
     action = state.get("action")
     
     # Only auto-update after certain actions
     if not should_auto_update_memory(action):
-        return state
+        return {}
     
     try:
         store = get_memory_store()
@@ -53,7 +53,8 @@ def auto_update_project_memory(state: AgentState) -> AgentState:
         # Silent failure - don't break the workflow if memory update fails
         print(f"Auto-memory update failed: {e}")
     
-    return state
+    # Return empty dict - don't add to response
+    return {}
 
 
 def recall_project_context(state: AgentState) -> AgentState:

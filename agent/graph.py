@@ -21,6 +21,7 @@ from agent.nodes.approval import check_approval_needed, request_approval, route_
 from agent.nodes.auto_memory_update import auto_update_project_memory, recall_project_context
 from agent.nodes.codebase_ops import index_codebase_node
 from agent.nodes.smart_search import smart_search_codebase
+from agent.nodes.reset_state import reset_accumulated_fields
 from agent.tools.memory import get_memory_store
 
 
@@ -84,6 +85,7 @@ def create_graph():
     """
     graph = StateGraph(AgentState)
     
+    graph.add_node("reset_state", reset_accumulated_fields)
     graph.add_node("determine_intent", determine_intent)
     graph.add_node("check_approval", check_approval_needed)
     graph.add_node("request_approval", request_approval)
@@ -115,7 +117,8 @@ def create_graph():
     graph.add_node("index_codebase", index_codebase_node)
     graph.add_node("search_codebase", smart_search_codebase)
     
-    graph.add_edge(START, "determine_intent")
+    graph.add_edge(START, "reset_state")
+    graph.add_edge("reset_state", "determine_intent")
     graph.add_edge("determine_intent", "check_approval")
     
     graph.add_conditional_edges(
