@@ -1,5 +1,6 @@
 # Core
 langgraph>=0.2.27
+langgraph-checkpoint-sqlite>=1.0.0
 langchain>=0.2.16
 openai>=1.46.0
 pydantic>=2.9.2

@@ -1,6 +1,6 @@
 from langgraph.graph import StateGraph, END, START
 from langgraph.types import Send
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 
 from agent.state import AgentState
 from agent.nodes.intent import determine_intent, route_action
@@ -191,7 +191,8 @@ def create_graph():
     graph.add_edge("prepare_retry", "install")
     graph.add_edge("install", "shell")  # Retry the command after install
     
-    checkpointer = MemorySaver()
+    # Persistent checkpointing - survives restarts, enables time travel
+    checkpointer = SqliteSaver.from_conn_string("data/checkpoints.db")
     store = get_memory_store()
     return graph.compile(checkpointer=checkpointer, store=store)
 
