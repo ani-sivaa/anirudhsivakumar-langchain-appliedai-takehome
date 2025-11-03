@@ -88,6 +88,10 @@ def route_approval(state: AgentState) -> str:
             return "project"
         elif action == "project_context":
             return "project_context"
+        elif action == "index_codebase":
+            return "index_codebase"
+        elif action == "search_codebase":
+            return "search_codebase"
         
         return "chat"
     
