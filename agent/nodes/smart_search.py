@@ -25,32 +25,48 @@ def smart_search_codebase(state: AgentState) -> AgentState:
         if not all_files:
             return {**state, "response": "Codebase not indexed yet. Run: 'index the codebase' first!"}
         
-        # Find matching files
-        matching_files = []
-        query_lower = query.lower()
+        # Convert to list of dicts
+        all_file_data = [
+            item.value if hasattr(item, 'value') else item
+            for item in all_files
+        ]
         
-        for item in all_files:
-            file_data = item.value if hasattr(item, 'value') else item
-            searchable = f"{file_data.get('path', '')} {file_data.get('summary', '')} {file_data.get('content', '')}"
+        # For general questions, prioritize key files
+        general_questions = ['what', 'tell me', 'explain', 'describe', 'overview', 'about']
+        is_general = any(q in query.lower() for q in general_questions)
+        
+        if is_general:
+            # For general questions, grab README + key project files
+            priority_patterns = ['readme', 'graph.py', 'state.py', 'main.py', 'requirements']
+            top_files = [f for f in all_file_data if any(p in f.get('path', '').lower() for p in priority_patterns)]
             
-            if query_lower in searchable.lower():
-                matching_files.append(file_data)
-        
-        # If no matches, try broader search with keywords
-        if not matching_files:
-            keywords = query_lower.split()
-            for item in all_files:
-                file_data = item.value if hasattr(item, 'value') else item
+            # If no priority files, just take first 5
+            if not top_files:
+                top_files = all_file_data[:5]
+            else:
+                top_files = top_files[:5]
+        else:
+            # For specific queries, search based on keywords
+            matching_files = []
+            keywords = [w for w in query.lower().split() if len(w) > 3]
+            
+            for file_data in all_file_data:
                 searchable = f"{file_data.get('path', '')} {file_data.get('summary', '')} {file_data.get('content', '')}".lower()
                 
-                if any(keyword in searchable for keyword in keywords if len(keyword) > 3):
-                    matching_files.append(file_data)
-        
-        # Get top results
-        top_files = matching_files[:5]
-        
-        if not top_files:
-            return {**state, "response": f"No files found matching '{query}'. The codebase has {len(all_files)} indexed files."}
+                # Score based on keyword matches
+                score = sum(1 for keyword in keywords if keyword in searchable)
+                
+                if score > 0:
+                    matching_files.append((score, file_data))
+            
+            # Sort by score and take top results
+            matching_files.sort(reverse=True, key=lambda x: x[0])
+            top_files = [f[1] for f in matching_files[:5]]
+            
+            if not top_files:
+                # Fallback to key files if no matches
+                priority_patterns = ['readme', 'graph.py', 'state.py']
+                top_files = [f for f in all_file_data if any(p in f.get('path', '').lower() for p in priority_patterns)][:3]
         
         # Build context from matching files
         context_parts = []
