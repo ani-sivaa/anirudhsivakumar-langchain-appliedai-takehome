@@ -29,6 +29,7 @@ Available actions:
 - "edit_multi": Edit multiple EXISTING files (e.g., "add type hints to utils.py and main.py")
 - "project": Create multiple NEW files (e.g., "create 5 files", "build a website", "scaffold a project")
 - "shell": Run a shell command
+- "install": Install a Python package via pip
 - "review": Review code changes (PR review, code review, diff review)
 - "remember": Save information to long-term memory
 - "recall": Retrieve information from long-term memory
@@ -61,6 +62,10 @@ Use "shell" for:
 - Command execution requests
 - "run", "execute", "ls", "grep" or other shell commands
 
+Use "install" for:
+- Installing Python packages
+- "install numpy", "pip install requests", "install scikit-learn"
+
 Use "review" for:
 - Code review requests
 - "review this PR", "review my changes", "check the diff"
@@ -91,12 +96,13 @@ Extract relevant information:
 
 Respond with valid JSON only:
 {
-    "action": "chat|edit|edit_multi|project|shell|review|remember|recall|project_context",
+    "action": "chat|edit|edit_multi|project|shell|install|review|remember|recall|project_context",
     "path": "file path" (for edit),
     "paths": ["file1.py", "file2.py"] (for edit_multi),
     "edit_instruction": "what to write or change" (for edit or edit_multi),
     "project_instruction": "full project description" (for project),
     "command": "shell command" (for shell),
+    "package_to_install": "package name" (for install),
     "base_branch": "branch name" (for review, optional),
     "head_branch": "branch name" (for review, optional),
     "memory_key": "key label" (for remember/recall),
@@ -107,6 +113,7 @@ Examples:
 - "hello" → {"action": "chat"}
 - "what can you do?" → {"action": "chat"}
 - "run ls -la" → {"action": "shell", "command": "ls -la"}
+- "install numpy" → {"action": "install", "package_to_install": "numpy"}
 - "review this PR" → {"action": "review"}
 - "add a fibonacci function to utils.py" → {"action": "edit", "path": "utils.py", "edit_instruction": "add a fibonacci function"}
 - "add type hints to utils.py and main.py" → {"action": "edit_multi", "paths": ["utils.py", "main.py"], "edit_instruction": "add type hints"}
@@ -174,6 +181,9 @@ Classify the intent and extract parameters as JSON:"""
         if "project_instruction" in intent_data:
             result["project_instruction"] = intent_data["project_instruction"]
         
+        if "package_to_install" in intent_data:
+            result["package_to_install"] = intent_data["package_to_install"]
+        
         result["error"] = ""
         return result
         
@@ -198,6 +208,8 @@ def route_action(state: AgentState) -> str:
         return "project"
     elif action == "shell":
         return "shell"
+    elif action == "install":
+        return "install"
     elif action == "review":
         return "review"
     elif action == "remember":

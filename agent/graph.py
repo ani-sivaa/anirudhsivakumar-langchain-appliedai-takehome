@@ -8,6 +8,7 @@ from agent.nodes.chat import chat_response
 from agent.nodes.file_io import read_file, write_file, read_file_multi, write_file_multi
 from agent.nodes.modify import modify_code, modify_code_multi
 from agent.nodes.shell import run_shell
+from agent.nodes.install import install_dependency, should_retry_with_install, prepare_retry
 from agent.nodes.git import get_git_diff
 from agent.nodes.review import review_file
 from agent.nodes.summarize import summarize_review
@@ -97,6 +98,8 @@ def create_graph():
     graph.add_node("write_file_multi", write_file_multi)
     graph.add_node("summarize_multi_edit", summarize_multi_edit)
     graph.add_node("shell", run_shell)
+    graph.add_node("install", install_dependency)
+    graph.add_node("prepare_retry", prepare_retry)
     graph.add_node("get_git_diff", get_git_diff)
     graph.add_node("review_file", review_file)
     graph.add_node("summarize_review", summarize_review)
@@ -119,6 +122,7 @@ def create_graph():
             "read_file": "read_file",
             "edit_multi": "edit_multi",
             "shell": "shell",
+            "install": "install",
             "review": "get_git_diff",
             "remember": "save_memory",
             "recall": "recall_memory",
@@ -136,6 +140,7 @@ def create_graph():
             "read_file": "read_file",
             "edit_multi": "edit_multi",
             "shell": "shell",
+            "install": "install",
             "review": "get_git_diff",
             "remember": "save_memory",
             "recall": "recall_memory",
@@ -146,7 +151,6 @@ def create_graph():
     )
     
     graph.add_edge("chat", END)
-    graph.add_edge("shell", END)
     graph.add_edge("save_memory", END)
     graph.add_edge("recall_memory", END)
     graph.add_edge("denied", END)
@@ -175,6 +179,17 @@ def create_graph():
     graph.add_edge("create_file", "summarize_project")
     graph.add_edge("summarize_project", "auto_memory")
     graph.add_edge("auto_memory", END)
+    
+    # Auto-heal loop: shell → (check if retry needed) → prepare_retry → install → shell (retry)
+    def route_shell_result(state: AgentState) -> str:
+        """Decides whether to retry shell command with package install or end."""
+        if should_retry_with_install(state):
+            return "prepare_retry"
+        return "end_shell"
+    
+    graph.add_conditional_edges("shell", route_shell_result, {"prepare_retry": "prepare_retry", "end_shell": END})
+    graph.add_edge("prepare_retry", "install")
+    graph.add_edge("install", "shell")  # Retry the command after install
     
     checkpointer = MemorySaver()
     store = get_memory_store()
