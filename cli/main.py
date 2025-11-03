@@ -1,4 +1,3 @@
-import uuid
 """
 CLI Entry Point - Interactive REPL for the coding agent.
 
@@ -15,6 +14,7 @@ DESIGN DECISION: Why interrupt handling instead of just exiting?
 - Makes the agent collaborative, not autonomous
 """
 
+import uuid
 import typer
 from rich.console import Console
 from rich.panel import Panel
