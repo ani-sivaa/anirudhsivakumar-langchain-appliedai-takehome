@@ -4,6 +4,10 @@ from agent.state import AgentState
 
 
 def summarize_multi_edit(state: AgentState) -> Dict:
+    """
+    After editing multiple files in parallel, this counts up the successes and failures.
+    Shows which files worked and which didn't.
+    """
     edit_results = state.get("edit_results", [])
     paths = state.get("paths", [])
     

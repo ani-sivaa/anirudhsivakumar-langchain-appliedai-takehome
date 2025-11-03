@@ -3,6 +3,10 @@ from typing import Optional
 
 
 def validate_python_syntax(code: str) -> Optional[str]:
+    """
+    Checks if Python code is syntactically valid using ast.parse.
+    Returns None if good, error message if broken.
+    """
     try:
         ast.parse(code)
         return None
@@ -13,5 +17,6 @@ def validate_python_syntax(code: str) -> Optional[str]:
 
 
 def should_validate_syntax(path: str) -> bool:
+    """Only validate Python files."""
     return path.endswith('.py')
 

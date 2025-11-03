@@ -1,40 +1,103 @@
-## anirudhsivakumar-langchain-appliedai-takehome
+## LangGraph Coding Agent
 
-## Built by **Anirudh Sivakumar**
-# Hi Palash & Brace! Thank you for giving me the opportunity to interview for LangChain, I hope you guys like and approve of what I've built!
+**Built by Anirudh Sivakumar**
 
-## My Approach
+Hey Palash & Brace! This is my take-home project for the LangChain Applied AI role. I built this to show I understand not just how to use LangGraph, but when and why to use each pattern.
 
-I'm building this agent to demonstrate my understanding of LangGraph and LangChain's powerful capabilities. My goal is to showcase how these frameworks can be used to create sophisticated AI agents with proper architecture patterns.
+## What It Does
 
-**LangGraph Patterns I'm gonna be using:**
-- **Serial Nodes**: Sequential file operations (read → modify → write)
-- **Conditional Edges**: Intent-based routing (chat vs edit actions)
-- **State Management**: TypedDict with reducers for conversation history
-- **Memory & Persistence**: MemorySaver for maintaining context across sessions
+A coding agent that can:
+- Edit files with natural language instructions
+- Chat about code and answer questions  
+- Run shell commands safely
+- Review PRs in parallel
+- Remember facts across sessions (SQLite persistence)
+- Create entire projects from scratch
 
-- **Parallel Execution**: Multi-file operations using Send() for concurrent processing
-- **Reducers**: Aggregating results from parallel branches
-- **Interrupts**: Human-in-the-loop approval for sensitive operations
-- **Time Travel**: Debugging and replaying agent decisions
+All built on LangGraph's StateGraph with proper architecture patterns.
 
-This is my way of showing that I understand not just how to use these tools, but when and why to use each pattern/capability the LangGraph framework has to offer.
-
-## Setup
+## Quick Start
 
 ```bash
+# Setup
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
+# Configure
 cp .env.example .env
-# Add your OPENAI_API_KEY to .env
-```
+# Add your OPENAI_API_KEY to the .env file
 
-## Run
-
-```bash
+# Run
 python3 -m cli.main
 ```
+
+## Example Usage
+
+```
+> Add type hints to utils.py
+→ determine_intent → check_approval → read_file → modify_code → write_file
+✓ Successfully wrote to utils.py
+
+> Review this PR
+→ determine_intent → check_approval → get_git_diff → [review_file × N] → summarize_review
+Review complete! Checked 3 files...
+
+> Remember my name is Anirudh
+→ determine_intent → check_approval → save_memory
+💾 Saved memory: name
+
+> What's my name?
+→ determine_intent → check_approval → recall_memory
+Your name is Anirudh!
+```
+
+## Architecture Highlights
+
+**LangGraph Patterns Used:**
+- Serial Nodes: read → modify → write flow
+- Parallel Execution: Multi-file edits with Send()
+- Conditional Edges: Intent-based routing
+- Reducers: Aggregating parallel results (operator.add, merge_dicts)
+- Checkpointing: MemorySaver for session continuity
+- Interrupts: Human-in-the-loop for dangerous operations
+- Long-term Memory: SQLite store for persistent facts
+
+**Security:**
+- Path traversal protection (blocks ../../etc/passwd)
+- Dangerous command detection (rm -rf, sudo, etc.)
+- Human approval for risky operations
+- Python syntax validation before writing
+
+**Code Quality:**
+- 52 comprehensive tests
+- Type hints throughout
+- Docstrings on all functions
+- Proper error handling with graceful fallbacks
+- Retry logic for LLM calls
+
+## Tests
+
+```bash
+pytest tests/ -v
+# All 52 tests should pass
+```
+
+## Project Structure
+
+```
+agent/
+  state.py         # AgentState with reducers
+  graph.py         # StateGraph definition
+  nodes/           # Pure functions for each workflow
+  tools/           # Reusable utilities
+cli/
+  main.py          # Interactive REPL with streaming
+tests/             # 52 tests covering all features
+```
+
+## Why LangGraph?
+
+I chose LangGraph because it gives you explicit control over complex agent workflows. The graph structure makes it easy to see the flow, debug with checkpoints, and add new capabilities without breaking existing ones. Plus the parallel execution with Send() is really elegant for scaling operations across multiple files.
 
 

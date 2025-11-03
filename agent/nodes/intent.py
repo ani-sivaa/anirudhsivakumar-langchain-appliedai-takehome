@@ -7,6 +7,11 @@ from agent.tools.parsing import safe_json_parse
 
 
 def determine_intent(state: AgentState) -> Dict:
+    """
+    Figures out what the user wants using an LLM.
+    Takes the user's message + recent conversation and classifies it into an action.
+    Returns stuff like action='edit', path='utils.py', edit_instruction='add type hints'.
+    """
     user_input = state.get("user_input", "")
     messages = state.get("messages", [])
     
@@ -44,6 +49,7 @@ Use "edit_multi" for:
 - "add type hints to utils.py, main.py, and helpers.py"
 - "refactor file1.py and file2.py"
 - "update logging in all these files: a.py, b.py, c.py"
+- "edit all these files" or "edit those files" - IMPORTANT: Look at conversation history to find which files were just mentioned/created
 
 Use "project" for:
 - Creating multiple NEW files from scratch
@@ -100,19 +106,24 @@ Examples:
 - "add a fibonacci function to utils.py" → {"action": "edit", "path": "utils.py", "edit_instruction": "add a fibonacci function"}
 - "add type hints to utils.py and main.py" → {"action": "edit_multi", "paths": ["utils.py", "main.py"], "edit_instruction": "add type hints"}
 - "refactor logging in file1.py, file2.py, file3.py" → {"action": "edit_multi", "paths": ["file1.py", "file2.py", "file3.py"], "edit_instruction": "refactor logging"}
+- "edit all these files to say hello" (after creating GOAT/README1.md, GOAT/README2.md...) → {"action": "edit_multi", "paths": ["GOAT/README1.md", "GOAT/README2.md", ...], "edit_instruction": "say hello"}
 - "in the anew folder write 5 readme files" → {"action": "project", "project_instruction": "create 5 readme files with random info in the anew folder"}
 - "create a website with html css" → {"action": "project", "project_instruction": "create a website with html css"}
 - "remember my name is John" → {"action": "remember", "memory_key": "name", "memory_value": {"name": "John"}}
-- "what's my name?" → {"action": "recall", "memory_key": "name"}"""
+- "what's my name?" → {"action": "recall", "memory_key": "name"}
 
+IMPORTANT: When user says "these files" or "those files" or "all files", look at the recent conversation context to find which specific files they're referring to. Extract the actual file paths from previous messages."""
+        
         context_lines = []
         if messages:
-            recent_messages = messages[-4:] if len(messages) > 4 else messages
+            # Use more context (8 messages) so we can see file paths from project creation
+            recent_messages = messages[-8:] if len(messages) > 8 else messages
             for msg in recent_messages:
                 role = msg.get("role", "user")
                 content = msg.get("content", "")
-                if len(content) > 200:
-                    content = content[:200] + "..."
+                # Keep file paths visible - don't truncate if it contains common file extensions or "Created"
+                if len(content) > 300 and not any(marker in content for marker in ['.py', '.md', '.js', 'Created', '✓']):
+                    content = content[:300] + "..."
                 context_lines.append(f"{role}: {content}")
         
         context_str = "\n".join(context_lines) if context_lines else "No previous context"
@@ -166,6 +177,10 @@ Classify the intent and extract parameters as JSON:"""
 
 
 def route_action(state: AgentState) -> str:
+    """
+    Simple router - looks at action and returns which node to go to next.
+    Used by the graph's conditional edges to decide the path.
+    """
     action = state.get("action", "chat")
     
     if action == "edit":

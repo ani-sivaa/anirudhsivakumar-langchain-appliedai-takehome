@@ -30,10 +30,10 @@ def main():
     
     memory_stats = get_memory_stats()
     if memory_stats.get("persistent"):
-        console.print(f"[dim green]💾 Long-term memory: SQLite ({memory_stats.get('db_path')})[/dim green]")
+        console.print(f"[dim green]Long-term memory: SQLite ({memory_stats.get('db_path')})[/dim green]")
         console.print(f"[dim green]   {memory_stats.get('total_entries', 0)} entries, {memory_stats.get('total_namespaces', 0)} namespaces[/dim green]")
     else:
-        console.print(f"[dim yellow]⚠️  Long-term memory: In-memory (data lost on restart)[/dim yellow]")
+        console.print(f"[dim yellow]Long-term memory: In-memory (data lost on restart)[/dim yellow]")
     
     session_id = str(uuid.uuid4())
     config = {"configurable": {"thread_id": session_id}}
@@ -60,17 +60,36 @@ def main():
         
         # Check if we should resume from interrupted checkpoint
         state = agent_graph.get_state(config)
-        is_resuming = should_resume(state)
         
-        if is_resuming:
-            resume_info = get_resume_info(state)
-            console.print(f"[dim yellow]{resume_info}[/dim yellow]")
+        # Only resume if there are actual pending nodes AND it's not already been processed
+        # If state.next is empty or None, the graph has finished and we should start fresh
+        is_resuming = False
+        if state.next and len(state.next) > 0:
+            # Check if this is a stale approval request (already denied/approved)
+            # If approval_response exists in state, we've already processed this approval
+            if "request_approval" in state.next:
+                approval_response = state.values.get("approval_response")
+                if approval_response:
+                    # This approval was already processed - don't resume it
+                    # Start fresh with new input
+                    is_resuming = False
+                else:
+                    # Real pending approval - resume
+                    is_resuming = True
+                    resume_info = get_resume_info(state)
+                    console.print(f"[dim yellow]{resume_info}[/dim yellow]")
+            else:
+                # Other pending nodes - resume normally
+                is_resuming = True
+                resume_info = get_resume_info(state)
+                console.print(f"[dim yellow]{resume_info}[/dim yellow]")
         
         try:
             # If resuming, pass None to continue from checkpoint
             # Otherwise pass new user input
             input_data = None if is_resuming else {"user_input": user_input}
             
+            interrupted = False
             for event in agent_graph.stream(
                 input_data,
                 config=config,
@@ -79,22 +98,104 @@ def main():
                 node_count += 1
                 
                 for node_name, node_data in event.items():
+                    # Check if this is an interrupt event
+                    if node_name == "__interrupt__":
+                        interrupted = True
+                        console.print()
+                        
+                        # Get the current state to access approval_request
+                        state = agent_graph.get_state(config)
+                        approval_request = state.values.get("approval_request", {})
+                        
+                        if approval_request:
+                            console.print(Panel.fit(
+                                Text.assemble(
+                                    Text("APPROVAL REQUIRED\n\n", style="bold yellow"),
+                                    Text(f"Type: ", style="dim"),
+                                    Text(f"{approval_request.get('type', 'unknown')}\n", style="bright_white"),
+                                    Text(f"Warning: ", style="dim"),
+                                    Text(f"{approval_request.get('warning', '')}\n\n", style="bold red"),
+                                    Text(f"{approval_request.get('question', 'Approve this operation?')}\n", style="bright_yellow"),
+                                    Text(f"\nCommand: ", style="dim") if approval_request.get('command') else Text(""),
+                                    Text(f"{approval_request.get('command', '')}\n", style="bright_red") if approval_request.get('command') else Text(""),
+                                    Text(f"\nFile: ", style="dim") if approval_request.get('path') else Text(""),
+                                    Text(f"{approval_request.get('path', '')}\n", style="bright_cyan") if approval_request.get('path') else Text(""),
+                                ),
+                                border_style="bold yellow",
+                                title="[bold yellow]Human Approval Needed[/bold yellow]"
+                            ))
+                            
+                            # Get user's decision
+                            while True:
+                                decision = console.input("\n[bold bright_yellow]Approve? (yes/no):[/bold bright_yellow] ").strip().lower()
+                                if decision in ['yes', 'y', 'approve']:
+                                    approval_response = "approve"
+                                    break
+                                elif decision in ['no', 'n', 'deny', 'cancel']:
+                                    approval_response = "deny"
+                                    break
+                                else:
+                                    console.print("[dim red]Please answer 'yes' or 'no'[/dim red]")
+                            
+                            # Update state with user's decision
+                            agent_graph.update_state(config, {"approval_response": approval_response})
+                            
+                            # Show status
+                            console.print()
+                            if approval_response == "approve":
+                                console.print("[dim green]Approved - resuming execution...[/dim green]\n")
+                            else:
+                                console.print("[dim red]Denied - cancelling operation...[/dim red]\n")
+                            
+                            # Resume execution and make sure we fully drain the stream
+                            for resume_event in agent_graph.stream(None, config=config, stream_mode="updates"):
+                                for resume_node_name, resume_node_data in resume_event.items():
+                                    # Skip any __interrupt__ events in resume - they're already handled
+                                    if resume_node_name == "__interrupt__":
+                                        continue
+                                    
+                                    console.print(f"[dim cyan]→ {resume_node_name}[/dim cyan]", end=" ")
+                                    
+                                    if isinstance(resume_node_data, dict):
+                                        if resume_node_data.get("response"):
+                                            console.print()
+                                            response = resume_node_data['response']
+                                            console.print(f"[bright_green]{response}[/bright_green]")
+                                        elif resume_node_data.get("error"):
+                                            console.print()
+                                            console.print(f"[bold red]Error: {resume_node_data['error']}[/bold red]")
+                                        else:
+                                            console.print("[dim]processing...[/dim]")
+                                    else:
+                                        console.print("[dim]processing...[/dim]")
+                        break
+                    
+                    # Normal node execution
                     console.print(f"[dim cyan]→ {node_name}[/dim cyan]", end=" ")
                     
-                    if node_data.get("response"):
-                        console.print()
-                        response = node_data['response']
-                        console.print(f"[bright_green]{response}[/bright_green]")
-                    elif node_data.get("error"):
-                        console.print()
-                        console.print(f"[bold red]Error: {node_data['error']}[/bold red]")
+                    # Check if node_data is a dict (some nodes might return None or other types)
+                    if isinstance(node_data, dict):
+                        if node_data.get("response"):
+                            console.print()
+                            response = node_data['response']
+                            console.print(f"[bright_green]{response}[/bright_green]")
+                        elif node_data.get("error"):
+                            console.print()
+                            console.print(f"[bold red]Error: {node_data['error']}[/bold red]")
+                        else:
+                            console.print("[dim]processing...[/dim]")
                     else:
                         console.print("[dim]processing...[/dim]")
+                
+                # If interrupted, we handled the rest in the loop above
+                if interrupted:
+                    break
             
-            console.print()
+            if not interrupted:
+                console.print()
         
         except KeyboardInterrupt:
-            console.print("\n\n[yellow]⚠ Interrupted! Checkpoint saved.[/yellow]")
+            console.print("\n\n[yellow]Interrupted! Checkpoint saved.[/yellow]")
             console.print("[dim]Type anything to resume from where you left off[/dim]\n")
         
         except Exception as e:

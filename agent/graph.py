@@ -13,6 +13,7 @@ from agent.nodes.review import review_file
 from agent.nodes.summarize import summarize_review
 from agent.nodes.summarize_edit import summarize_multi_edit
 from agent.nodes.edit_multi_passthrough import edit_multi_passthrough
+from agent.nodes.edit_multi_stages import edit_multi_modify_passthrough, edit_multi_write_passthrough
 from agent.nodes.memory_ops import save_user_memory, recall_user_memory
 from agent.nodes.project import plan_project, create_project_file, summarize_project
 from agent.nodes.approval import check_approval_needed, request_approval, route_approval, route_after_approval, handle_denial
@@ -20,31 +21,63 @@ from agent.tools.memory import get_memory_store
 
 
 def fan_out_reviews(state: AgentState):
+    """Creates parallel review_file instances - one per changed file."""
     diffs = state.get("diffs", [])
     return [Send("review_file", {"file": d["file"], "diff": d["diff"]}) for d in diffs]
 
 
 def fan_out_project_files(state: AgentState):
+    """Creates parallel create_file instances - one per planned file."""
     files = state.get("project_files", [])
     return [Send("create_file", {"file_path": f["path"], "file_description": f["description"]}) for f in files]
 
 
 def fan_out_read_multi(state: AgentState):
+    """Creates parallel read_file_multi instances - one per file to edit."""
     paths = state.get("paths", [])
+    # Send() only passes the dict provided, not the full state
+    # We only need path for read operations
     return [Send("read_file_multi", {"path": path}) for path in paths]
 
 
 def fan_out_modify_multi(state: AgentState):
+    """Creates parallel modify_code_multi instances - one per file."""
     paths = state.get("paths", [])
-    return [Send("modify_code_multi", {"path": path}) for path in paths]
+    contents = state.get("contents", {})
+    instruction = state.get("edit_instruction", "")
+    
+    # Send() needs ALL the data the modify node will need
+    # Can't rely on state being passed through - must include it explicitly
+    return [
+        Send("modify_code_multi", {
+            "path": path,
+            "contents": contents,
+            "edit_instruction": instruction
+        }) 
+        for path in paths
+    ]
 
 
 def fan_out_write_multi(state: AgentState):
+    """Creates parallel write_file_multi instances - one per file."""
     paths = state.get("paths", [])
-    return [Send("write_file_multi", {"path": path}) for path in paths]
+    modifications = state.get("modifications", {})
+    
+    # Send() needs the modifications dict so write nodes can access it
+    return [
+        Send("write_file_multi", {
+            "path": path,
+            "modifications": modifications
+        }) 
+        for path in paths
+    ]
 
 
 def create_graph():
+    """
+    Builds the main LangGraph StateGraph with all nodes and edges.
+    This is where the magic happens - defines all the workflows and how they connect.
+    """
     graph = StateGraph(AgentState)
     
     graph.add_node("determine_intent", determine_intent)
@@ -57,7 +90,9 @@ def create_graph():
     graph.add_node("write_file", write_file)
     graph.add_node("edit_multi", edit_multi_passthrough)
     graph.add_node("read_file_multi", read_file_multi)
+    graph.add_node("edit_multi_modify", edit_multi_modify_passthrough)
     graph.add_node("modify_code_multi", modify_code_multi)
+    graph.add_node("edit_multi_write", edit_multi_write_passthrough)
     graph.add_node("write_file_multi", write_file_multi)
     graph.add_node("summarize_multi_edit", summarize_multi_edit)
     graph.add_node("shell", run_shell)
@@ -115,9 +150,12 @@ def create_graph():
     graph.add_edge("modify_code", "write_file")
     graph.add_edge("write_file", END)
     
+    # Multi-file edit: single fan-out per stage, not per node
     graph.add_conditional_edges("edit_multi", fan_out_read_multi, ["read_file_multi"])
-    graph.add_conditional_edges("read_file_multi", fan_out_modify_multi, ["modify_code_multi"])
-    graph.add_conditional_edges("modify_code_multi", fan_out_write_multi, ["write_file_multi"])
+    graph.add_edge("read_file_multi", "edit_multi_modify")  # Collect all reads first
+    graph.add_conditional_edges("edit_multi_modify", fan_out_modify_multi, ["modify_code_multi"])
+    graph.add_edge("modify_code_multi", "edit_multi_write")  # Collect all modifies first
+    graph.add_conditional_edges("edit_multi_write", fan_out_write_multi, ["write_file_multi"])
     graph.add_edge("write_file_multi", "summarize_multi_edit")
     graph.add_edge("summarize_multi_edit", END)
     

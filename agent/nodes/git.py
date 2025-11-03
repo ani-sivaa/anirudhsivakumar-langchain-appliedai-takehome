@@ -5,6 +5,10 @@ from agent.state import AgentState
 
 
 def get_git_diff(state: AgentState) -> Dict:
+    """
+    Gets git diffs between two branches for PR review.
+    First finds all changed files, then gets the diff for each one.
+    """
     base_branch = state.get("base_branch", "main")
     head_branch = state.get("head_branch", "HEAD")
     

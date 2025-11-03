@@ -5,6 +5,10 @@ from agent.tools.llm import get_llm
 
 
 def save_user_memory(state: AgentState) -> Dict:
+    """
+    Saves stuff to long-term memory (SQLite database).
+    Like when user says "remember my name is John".
+    """
     memory_key = state.get("memory_key", "")
     memory_value = state.get("memory_value", {})
     user_id = state.get("user_id", "default_user")
@@ -23,6 +27,10 @@ def save_user_memory(state: AgentState) -> Dict:
 
 
 def recall_user_memory(state: AgentState) -> Dict:
+    """
+    Retrieves stuff from long-term memory and formats it naturally with LLM.
+    Like when user asks "what's my name?" and we saved it earlier.
+    """
     memory_key = state.get("memory_key", "")
     user_id = state.get("user_id", "default_user")
     user_input = state.get("user_input", "")

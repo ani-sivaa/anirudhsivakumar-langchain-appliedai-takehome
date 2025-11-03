@@ -5,6 +5,11 @@ from agent.state import AgentState
 
 
 def run_shell(state: AgentState) -> Dict:
+    """
+    Runs shell commands like ls, git status, etc.
+    Has a 30 second timeout so it doesn't hang forever.
+    Dangerous commands get caught by the approval workflow before this runs.
+    """
     command = state.get("command", "")
     
     if not command:

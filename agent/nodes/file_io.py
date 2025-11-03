@@ -8,6 +8,10 @@ WORKSPACE_ROOT = Path.cwd()
 
 
 def validate_path(path: str) -> tuple[bool, str]:
+    """
+    Makes sure the file path isn't trying to escape the workspace.
+    Blocks things like ../../etc/passwd or symlinks pointing outside.
+    """
     try:
         file_path = Path(path).resolve()
         file_path.relative_to(WORKSPACE_ROOT)
@@ -19,6 +23,10 @@ def validate_path(path: str) -> tuple[bool, str]:
 
 
 def read_file(state: AgentState) -> Dict:
+    """
+    Reads a file and puts the content into state.
+    Used in the single-file edit flow.
+    """
     path = state.get("path", "")
     
     if not path:
@@ -47,6 +55,10 @@ def read_file(state: AgentState) -> Dict:
 
 
 def write_file(state: AgentState) -> Dict:
+    """
+    Writes the modified content to disk.
+    Creates folders if they don't exist.
+    """
     path = state.get("path", "")
     content = state.get("modified_content", "")
     
@@ -75,51 +87,70 @@ def write_file(state: AgentState) -> Dict:
 
 
 def read_file_multi(state: AgentState) -> Dict:
+    """
+    Reads one file when editing multiple files in parallel.
+    Gets spawned multiple times by Send() - each instance reads its own file.
+    """
     path = state.get("path", "")
     
     if not path:
-        return {"error": "No file path specified for multi-read"}
+        # Don't write to 'error' field from parallel nodes - causes conflicts
+        # Instead, write empty content which will be caught later
+        return {"contents": {}}
     
     is_valid, error_msg = validate_path(path)
     if not is_valid:
-        return {"error": error_msg}
+        # Write to contents with error message as value
+        return {"contents": {path: f"ERROR: {error_msg}"}}
     
     try:
         file_path = Path(path).resolve()
         
         if not file_path.exists():
-            return {"error": f"File not found: {path}"}
+            return {"contents": {path: f"ERROR: File not found"}}
         
         if not file_path.is_file():
-            return {"error": f"Not a file: {path}"}
+            return {"contents": {path: f"ERROR: Not a file"}}
         
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
         
-        return {"contents": {path: content}, "error": ""}
+        return {"contents": {path: content}}
         
     except Exception as e:
-        return {"error": f"Error reading file {path}: {str(e)}"}
+        return {"contents": {path: f"ERROR: {str(e)}"}}
 
 
 def write_file_multi(state: AgentState) -> Dict:
+    """
+    Writes one file when editing multiple files in parallel.
+    Each instance writes its file and adds a result like "✓ file.py" to the list.
+    """
     path = state.get("path", "")
     modifications = state.get("modifications", {})
     
+    # EXTENSIVE DEBUG
+    all_state_keys = list(state.keys()) if state else []
+    contents_keys = list(state.get("contents", {}).keys()) if state.get("contents") else []
+    
     if not path:
-        return {"error": "No file path specified for multi-write"}
+        return {"edit_results": [f"✗ Unknown: No path. State keys: {all_state_keys[:10]}"]}
     
     is_valid, error_msg = validate_path(path)
     if not is_valid:
-        return {
-            "edit_results": [f"✗ {path}: {error_msg}"],
-            "error": error_msg
-        }
+        return {"edit_results": [f"✗ {path}: {error_msg}"]}
+    
+    if not modifications:
+        return {"edit_results": [f"✗ {path}: modifications is empty/None. State keys: {all_state_keys[:10]}, contents keys: {contents_keys[:5]}"]}
     
     if path not in modifications:
-        return {"error": f"No modified content found for {path}"}
+        return {"edit_results": [f"✗ {path}: Path not in modifications. Has: {list(modifications.keys())[:5]}"]}
     
     content = modifications[path]
+    
+    # If content is an error message from previous stages, don't write it
+    if isinstance(content, str) and content.startswith("ERROR:"):
+        return {"edit_results": [f"✗ {path}: {content}"]}
     
     try:
         file_path = Path(path).resolve()
@@ -128,13 +159,7 @@ def write_file_multi(state: AgentState) -> Dict:
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
         
-        return {
-            "edit_results": [f"✓ {path}"],
-            "error": ""
-        }
+        return {"edit_results": [f"✓ {path}"]}
         
     except Exception as e:
-        return {
-            "edit_results": [f"✗ {path}: {str(e)}"],
-            "error": f"Error writing file {path}: {str(e)}"
-        }
+        return {"edit_results": [f"✗ {path}: {str(e)}"]}

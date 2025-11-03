@@ -6,6 +6,12 @@ from agent.tools.validation import validate_python_syntax, should_validate_synta
 
 
 def modify_code(state: AgentState) -> Dict:
+    """
+    Uses LLM to modify file content based on user's instruction.
+    If the instruction mentions "from conversation", it looks at chat history.
+    Otherwise it just shows the current file + instruction to the LLM.
+    Checks syntax for Python files before returning.
+    """
     content = state.get("content", "")
     instruction = state.get("edit_instruction", "")
     path = state.get("path", "")
@@ -91,20 +97,29 @@ Provide the complete file content:"""
 
 
 def modify_code_multi(state: AgentState) -> Dict:
+    """
+    Modifies one file when doing parallel multi-file edits.
+    Same as modify_code but for the parallel workflow.
+    """
     path = state.get("path", "")
     contents = state.get("contents", {})
     instruction = state.get("edit_instruction", "")
     
     if not path:
-        return {"error": "No file path provided for multi-modify"}
+        return {"modifications": {}}
     
     if not instruction:
-        return {"error": "No edit instruction provided"}
+        return {"modifications": {}}
     
     if path not in contents:
-        return {"error": f"No content found for {path}"}
+        return {"modifications": {}}
     
     content = contents[path]
+    
+    # Check if content is an error message
+    if isinstance(content, str) and content.startswith("ERROR:"):
+        # Skip modification for errored files
+        return {"modifications": {path: content}}
     
     try:
         llm = get_llm()
@@ -141,9 +156,9 @@ Provide the complete modified file content:"""
         if should_validate_syntax(path):
             syntax_error = validate_python_syntax(modified_content)
             if syntax_error:
-                return {"error": f"Generated code has syntax error: {syntax_error}"}
+                return {"modifications": {path: f"ERROR: Syntax error - {syntax_error}"}}
         
-        return {"modifications": {path: modified_content}, "error": ""}
+        return {"modifications": {path: modified_content}}
         
     except Exception as e:
-        return {"error": f"Error modifying code for {path}: {str(e)}"}
+        return {"modifications": {path: f"ERROR: {str(e)}"}}

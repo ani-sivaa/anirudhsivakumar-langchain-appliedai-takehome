@@ -5,6 +5,10 @@ from agent.tools.llm import get_llm
 
 
 def summarize_review(state: AgentState) -> Dict:
+    """
+    Takes all the individual file reviews and combines them into one summary.
+    If there's more than one file, uses LLM to make it cohesive.
+    """
     review_comments = state.get("review_comments", [])
     
     if not review_comments:

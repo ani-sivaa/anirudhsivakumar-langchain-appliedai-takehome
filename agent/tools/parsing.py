@@ -4,6 +4,10 @@ from typing import Optional
 
 
 def extract_json_from_markdown(text: str) -> str:
+    """
+    Extracts JSON from LLM responses that might wrap it in markdown code blocks.
+    Handles cases like ```json {...} ``` or just {...}
+    """
     text = text.strip()
     
     json_pattern = r'```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```'
@@ -23,6 +27,10 @@ def extract_json_from_markdown(text: str) -> str:
 
 
 def safe_json_parse(text: str, default: Optional[dict] = None) -> dict:
+    """
+    Parses JSON with fallback to default if it fails.
+    Useful when LLM returns malformed JSON - we can gracefully fallback instead of crashing.
+    """
     try:
         cleaned = extract_json_from_markdown(text)
         return json.loads(cleaned)

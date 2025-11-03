@@ -10,6 +10,11 @@ load_dotenv()
 
 
 def retry_with_backoff(func, max_retries=3, initial_delay=1.0):
+    """
+    Retries a function if it fails, with exponential backoff.
+    Waits 1s, then 2s, then 4s between retries.
+    Helpful for when OpenAI API has hiccups or rate limits.
+    """
     for attempt in range(max_retries):
         try:
             return func()

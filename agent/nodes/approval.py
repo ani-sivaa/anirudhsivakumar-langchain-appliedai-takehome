@@ -6,6 +6,10 @@ from agent.tools.interrupts import is_dangerous_command, is_sensitive_file, form
 
 
 def check_approval_needed(state: AgentState) -> Dict:
+    """
+    Checks if the operation needs human approval before running.
+    Looks for dangerous shell commands (rm -rf, sudo) and sensitive files (.env, secrets).
+    """
     action = state.get("action", "")
     
     if action == "shell":
@@ -17,7 +21,7 @@ def check_approval_needed(state: AgentState) -> Dict:
                     "type": "shell_execution",
                     "question": f"Execute potentially dangerous command?",
                     "command": command,
-                    "warning": "⚠️ This command could be destructive"
+                    "warning": "This command could be destructive"
                 }
             }
     
@@ -39,7 +43,7 @@ def check_approval_needed(state: AgentState) -> Dict:
                     "question": f"Modify sensitive file: {path}?",
                     "path": path,
                     "diff": diff,
-                    "warning": "⚠️ This is a sensitive file"
+                    "warning": " This is a sensitive file"
                 }
             }
     
@@ -47,6 +51,10 @@ def check_approval_needed(state: AgentState) -> Dict:
 
 
 def request_approval(state: AgentState) -> Dict:
+    """
+    Pauses execution to ask the user for approval.
+    Uses LangGraph's interrupt() to wait for user input.
+    """
     approval_request = state.get("approval_request", {})
     
     if not approval_request:
@@ -58,6 +66,7 @@ def request_approval(state: AgentState) -> Dict:
 
 
 def route_approval(state: AgentState) -> str:
+    """Routes to either the action or approval request based on whether approval is needed."""
     if not state.get("approval_required", False):
         action = state.get("action", "chat")
         
@@ -82,6 +91,7 @@ def route_approval(state: AgentState) -> str:
 
 
 def route_after_approval(state: AgentState) -> str:
+    """Routes based on user's approval decision - either proceed or go to denied node."""
     approval = state.get("approval_response", "deny")
     
     if approval == "approve":
@@ -108,6 +118,7 @@ def route_after_approval(state: AgentState) -> str:
 
 
 def handle_denial(state: AgentState) -> Dict:
+    """Handles when user denies approval - just returns an error message."""
     action = state.get("action", "")
     
     return {

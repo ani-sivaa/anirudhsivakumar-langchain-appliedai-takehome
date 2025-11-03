@@ -5,6 +5,11 @@ from agent.tools.llm import get_llm
 
 
 def review_file(state: AgentState) -> Dict:
+    """
+    Reviews one file's changes using LLM.
+    When reviewing a PR with multiple files, this runs in parallel for each file.
+    The LLM looks for bugs, performance issues, security problems, etc.
+    """
     file_path = state.get("file", "")
     diff = state.get("diff", "")
     

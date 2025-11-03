@@ -3,6 +3,10 @@ from operator import add
 
 
 def merge_dicts(existing: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Merges dicts from parallel nodes - needed when multiple nodes write to same field.
+    When two nodes both add stuff to 'contents', this combines them instead of one overwriting the other.
+    """
     if existing is None:
         return new
     if new is None:
@@ -11,46 +15,63 @@ def merge_dicts(existing: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]
 
 
 class AgentState(TypedDict, total=False):
-    user_input: str
-    response: Annotated[str, add]
+    """
+    The brain of the agent - stores everything happening during execution.
+    total=False means nodes only update fields they care about, not all 40.
+    """
     
-    messages: Annotated[List[Dict[str, str]], add]
+    # === USER I/O ===
+    # What the user sends in and what we send back
+    user_input: str  # The user's request: "Add type hints to utils.py"
+    response: Annotated[str, add]  # Our response - add reducer lets parallel nodes append to it
+    messages: Annotated[List[Dict[str, str]], add]  # Full chat history: [{role: "user", content: "hi"}]
     
-    action: str
+    # === ROUTING ===
+    # Determines which workflow to execute
+    action: str  # "chat", "edit", "edit_multi", "shell", "review", "project", "remember", "recall"
     
-    path: str
-    content: str
-    edit_instruction: str
-    modified_content: str
+    # === SINGLE FILE EDIT (serial: read → modify → write) ===
+    path: str  # File path: "agent/state.py"
+    content: str  # File content after reading
+    edit_instruction: str  # What to change: "Add docstrings"
+    modified_content: str  # New content after LLM modifies it
     
-    paths: List[str]
-    contents: Annotated[Dict[str, str], merge_dicts]
-    modifications: Annotated[Dict[str, str], merge_dicts]
-    edit_results: Annotated[List[str], add]
+    # === MULTI FILE EDIT (parallel: fan-out read/modify/write) ===
+    paths: List[str]  # Multiple files: ["a.py", "b.py", "c.py"]
+    contents: Annotated[Dict[str, str], merge_dicts]  # {path: content} - merge_dicts combines from parallel reads
+    modifications: Annotated[Dict[str, str], merge_dicts]  # {path: modified_content} - from parallel modifies
+    edit_results: Annotated[List[str], add]  # ["✓ a.py", "✓ b.py"] - add reducer collects results
     
-    command: str
-    shell_output: str
-    return_code: int
+    # === SHELL EXECUTION ===
+    command: str  # Shell command: "ls -la"
+    shell_output: str  # stdout/stderr from command
+    return_code: int  # Exit code: 0 = success
     
-    base_branch: str
-    head_branch: str
-    diffs: List[Dict[str, str]]
-    file: str
-    diff: str
-    review_comments: Annotated[List[str], add]
-    review_summary: str
+    # === PR REVIEW (parallel: per-file reviews then aggregate) ===
+    base_branch: str  # Branch to compare against: "main"
+    head_branch: str  # Branch with changes: "feature-branch"
+    diffs: List[Dict[str, str]]  # [{file: "a.py", diff: "+new line"}] - one per changed file
+    file: str  # Current file being reviewed in parallel node
+    diff: str  # Current diff being reviewed in parallel node
+    review_comments: Annotated[List[str], add]  # Per-file comments - add reducer collects them
+    review_summary: str  # Final aggregated review
     
-    user_id: str
-    memory_key: str
-    memory_value: Dict
-    memory_query: str
+    # === LONG-TERM MEMORY (SQLite persistence) ===
+    user_id: str  # User namespace: "default_user"
+    memory_key: str  # What to save/recall: "name", "preferences"
+    memory_value: Dict  # Data to save: {"name": "Anirudh"}
+    memory_query: str  # Search query for memories
     
-    project_instruction: str
-    project_files: List[Dict[str, str]]
-    file_path: str
-    file_description: str
-    approval_required: bool
-    approval_request: Dict
-    approval_response: str
+    # === PROJECT CREATION (parallel: create multiple files) ===
+    project_instruction: str  # High-level goal: "Create a simple website"
+    project_files: List[Dict[str, str]]  # [{path: "index.html", description: "..."}]
+    file_path: str  # Current file being created in parallel node
+    file_description: str  # What content to generate for file
     
-    error: str
+    # === HUMAN-IN-THE-LOOP (interrupts for dangerous operations) ===
+    approval_required: bool  # True if operation needs user approval
+    approval_request: Dict  # {type: "command", question: "Run rm -rf?", warning: "Dangerous"}
+    approval_response: str  # User's decision: "approve" or "deny"
+    
+    # === ERROR HANDLING ===
+    error: str  # Error message if something fails
