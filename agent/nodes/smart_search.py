@@ -19,37 +19,25 @@ def smart_search_codebase(state: AgentState) -> AgentState:
         store = get_memory_store()
         query = state.get("user_input", "")
         
-        # Search for relevant files
-        all_files = list(store.search(("codebase", "files")))
+        # Search for relevant files - SQLiteStore.search() returns tuples (namespace, key, value, timestamp)
+        search_results = store.search(("codebase", "files"))
         
-        print(f"DEBUG: Retrieved {len(all_files)} items from store")
-        
-        if not all_files:
-            return {**state, "response": "Codebase not indexed yet. Run: 'index the codebase' first!"}
-        
-        # Debug first item
-        if all_files:
-            first = all_files[0]
-            print(f"DEBUG: First item type: {type(first)}")
-            print(f"DEBUG: First item dir: {dir(first)[:10]}")
-            if hasattr(first, 'value'):
-                print(f"DEBUG: First item.value type: {type(first.value)}")
-                print(f"DEBUG: First item.value: {first.value}")
-            print(f"DEBUG: First item as is: {first}")
-        
-        # Convert to list of dicts
+        # Extract the value from each result
         all_file_data = []
-        for item in all_files:
-            if hasattr(item, 'value'):
-                all_file_data.append(item.value)
-            elif isinstance(item, dict):
-                all_file_data.append(item)
-            else:
-                print(f"DEBUG: Unexpected item type: {type(item)}, value: {item}")
+        for result in search_results:
+            # SQLiteStore returns (namespace, key, value, timestamp) tuples
+            if isinstance(result, tuple) and len(result) >= 3:
+                value = result[2]  # Third element is the value
+                if value:
+                    all_file_data.append(value)
+            elif hasattr(result, 'value'):
+                if result.value:
+                    all_file_data.append(result.value)
+            elif isinstance(result, dict):
+                all_file_data.append(result)
         
-        # Filter out None values
-        all_file_data = [f for f in all_file_data if f is not None]
-        print(f"DEBUG: Processed {len(all_file_data)} valid file entries")
+        if not all_file_data:
+            return {**state, "response": "Codebase not indexed yet. Run: 'index the codebase' first!"}
         
         # For general questions, prioritize key files
         general_questions = ['what', 'tell me', 'explain', 'describe', 'overview', 'about']
