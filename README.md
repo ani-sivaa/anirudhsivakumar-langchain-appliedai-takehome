@@ -59,7 +59,7 @@ Your name is Anirudh!
 - Parallel Execution: Multi-file edits with Send()
 - Conditional Edges: Intent-based routing
 - Reducers: Aggregating parallel results (operator.add, merge_dicts)
-- Checkpointing: MemorySaver for session continuity
+- Persistent Checkpointing: SqliteSaver for durable state (survives restarts, enables time travel)
 - Interrupts: Human-in-the-loop for dangerous operations
 - Long-term Memory: SQLite store for persistent facts
 

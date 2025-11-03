@@ -124,7 +124,7 @@ def read_file_multi(state: AgentState) -> Dict:
 def write_file_multi(state: AgentState) -> Dict:
     """
     Writes one file when editing multiple files in parallel.
-    Each instance writes its file and adds a result like "✓ file.py" to the list.
+    Each instance writes its file and adds a result like "SUCCESS: file.py" to the list.
     """
     path = state.get("path", "")
     modifications = state.get("modifications", {})
@@ -159,7 +159,7 @@ def write_file_multi(state: AgentState) -> Dict:
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
         
-        return {"edit_results": [f"✓ {path}"]}
+        return {"edit_results": [f"SUCCESS: {path}"]}
         
     except Exception as e:
         return {"edit_results": [f"✗ {path}: {str(e)}"]}
