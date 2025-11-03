@@ -1,6 +1,17 @@
 """
-Package installation node - installs Python packages via pip.
-Used both for explicit install requests and auto-heal retry logic.
+Package installation with auto-heal capabilities.
+
+DESIGN DECISION: Why auto-heal instead of just showing errors?
+- Common pattern: Run script → ModuleNotFoundError → manually install → re-run
+- Auto-heal: Detect missing package → install → retry automatically
+- Better UX - agent fixes its own problems
+- retry_count prevents infinite loops (max 1 retry)
+
+DESIGN DECISION: Why separate install node instead of inline in shell?
+- Reusable for explicit installs ("install numpy")
+- Testable in isolation
+- Can be part of different workflows (auto-heal, explicit, pre-project setup)
+- Keeps shell node simple and focused
 """
 
 import subprocess

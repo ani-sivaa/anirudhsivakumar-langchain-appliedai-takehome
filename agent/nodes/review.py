@@ -1,3 +1,14 @@
+"""
+Code review with parallel file processing.
+
+DESIGN DECISION: Why parallel reviews instead of sequential?
+- PRs often have 10+ changed files
+- Reviewing sequentially = 10 * LLM_latency (slow!)
+- Send() creates parallel review_file nodes = 1 * LLM_latency (fast!)
+- Reducer (operator.add) aggregates all comments
+- Trade-off: More LLM calls simultaneously, but way faster overall
+"""
+
 from typing import Dict
 
 from agent.state import AgentState
