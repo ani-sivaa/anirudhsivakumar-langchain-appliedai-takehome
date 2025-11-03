@@ -66,6 +66,7 @@ Use "project" for:
 Use "shell" for:
 - Command execution requests
 - "run", "execute", "ls", "grep" or other shell commands
+- IMPORTANT: Extract the EXACT command string - do not modify, rephrase, or summarize it
 
 Use "install" for:
 - Installing Python packages
@@ -104,10 +105,12 @@ Extract relevant information:
 - For "edit": extract path and edit_instruction (the content or instruction)
 - For "edit_multi": extract paths (array of file paths) and edit_instruction (what to change)
 - For "project": extract project_instruction (full description of what to create)
-- For "shell": extract command (the shell command to run)
+- For "shell": extract command EXACTLY as written - preserve all characters, spacing, filenames
 - For "review": extract base_branch and head_branch (optional, defaults to main and HEAD)
 - For "remember": extract memory_key (label) and memory_value (dict of info to save)
 - For "recall": extract memory_key (what to retrieve)
+
+CRITICAL: When extracting shell commands, copy them EXACTLY. Do not fix typos, rephrase, or modify them in any way.
 
 Respond with valid JSON only:
 {
@@ -128,6 +131,7 @@ Examples:
 - "hello" → {"action": "chat"}
 - "how are you?" → {"action": "chat"}
 - "run ls -la" → {"action": "shell", "command": "ls -la"}
+- "run this shell command: git add README.md" → {"action": "shell", "command": "git add README.md"}
 - "install numpy" → {"action": "install", "package_to_install": "numpy"}
 - "review this PR" → {"action": "review"}
 - "add a fibonacci function to utils.py" → {"action": "edit", "path": "utils.py", "edit_instruction": "add a fibonacci function"}
