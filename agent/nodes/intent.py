@@ -32,6 +32,7 @@ Available actions:
 - "review": Review code changes (PR review, code review, diff review)
 - "remember": Save information to long-term memory
 - "recall": Retrieve information from long-term memory
+- "project_context": Get current project structure and file list from memory
 
 IMPORTANT: Use "chat" for:
 - Questions (how, what, why, can you, etc.)
@@ -72,6 +73,10 @@ Use "recall" for:
 - Retrieving saved information
 - "what's my name?", "what do I prefer?", "what did I tell you about X?"
 
+Use "project_context" for:
+- Asking about the current project structure
+- "what files exist?", "show me the project structure", "what did we build?", "list all files"
+
 When user says "write it" or "save it", look at conversation history to understand what content they're referring to.
 
 Extract relevant information:
@@ -86,7 +91,7 @@ Extract relevant information:
 
 Respond with valid JSON only:
 {
-    "action": "chat|edit|edit_multi|project|shell|review|remember|recall",
+    "action": "chat|edit|edit_multi|project|shell|review|remember|recall|project_context",
     "path": "file path" (for edit),
     "paths": ["file1.py", "file2.py"] (for edit_multi),
     "edit_instruction": "what to write or change" (for edit or edit_multi),
@@ -111,6 +116,8 @@ Examples:
 - "create a website with html css" → {"action": "project", "project_instruction": "create a website with html css"}
 - "remember my name is John" → {"action": "remember", "memory_key": "name", "memory_value": {"name": "John"}}
 - "what's my name?" → {"action": "recall", "memory_key": "name"}
+- "what files exist in this project?" → {"action": "project_context"}
+- "show me the project structure" → {"action": "project_context"}
 
 IMPORTANT: When user says "these files" or "those files" or "all files", look at the recent conversation context to find which specific files they're referring to. Extract the actual file paths from previous messages."""
         
@@ -197,5 +204,7 @@ def route_action(state: AgentState) -> str:
         return "remember"
     elif action == "recall":
         return "recall"
+    elif action == "project_context":
+        return "project_context"
     
     return "chat"

@@ -17,6 +17,7 @@ from agent.nodes.edit_multi_stages import edit_multi_modify_passthrough, edit_mu
 from agent.nodes.memory_ops import save_user_memory, recall_user_memory
 from agent.nodes.project import plan_project, create_project_file, summarize_project
 from agent.nodes.approval import check_approval_needed, request_approval, route_approval, route_after_approval, handle_denial
+from agent.nodes.auto_memory_update import auto_update_project_memory, recall_project_context
 from agent.tools.memory import get_memory_store
 
 
@@ -104,6 +105,8 @@ def create_graph():
     graph.add_node("plan_project", plan_project)
     graph.add_node("create_file", create_project_file)
     graph.add_node("summarize_project", summarize_project)
+    graph.add_node("auto_memory", auto_update_project_memory)
+    graph.add_node("project_context", recall_project_context)
     
     graph.add_edge(START, "determine_intent")
     graph.add_edge("determine_intent", "check_approval")
@@ -120,6 +123,7 @@ def create_graph():
             "remember": "save_memory",
             "recall": "recall_memory",
             "project": "plan_project",
+            "project_context": "project_context",
             "request_approval": "request_approval"
         }
     )
@@ -136,6 +140,7 @@ def create_graph():
             "remember": "save_memory",
             "recall": "recall_memory",
             "project": "plan_project",
+            "project_context": "project_context",
             "denied": "denied"
         }
     )
@@ -145,10 +150,12 @@ def create_graph():
     graph.add_edge("save_memory", END)
     graph.add_edge("recall_memory", END)
     graph.add_edge("denied", END)
+    graph.add_edge("project_context", END)
     
     graph.add_edge("read_file", "modify_code")
     graph.add_edge("modify_code", "write_file")
-    graph.add_edge("write_file", END)
+    graph.add_edge("write_file", "auto_memory")
+    graph.add_edge("auto_memory", END)
     
     # Multi-file edit: single fan-out per stage, not per node
     graph.add_conditional_edges("edit_multi", fan_out_read_multi, ["read_file_multi"])
@@ -157,7 +164,8 @@ def create_graph():
     graph.add_edge("modify_code_multi", "edit_multi_write")  # Collect all modifies first
     graph.add_conditional_edges("edit_multi_write", fan_out_write_multi, ["write_file_multi"])
     graph.add_edge("write_file_multi", "summarize_multi_edit")
-    graph.add_edge("summarize_multi_edit", END)
+    graph.add_edge("summarize_multi_edit", "auto_memory")
+    graph.add_edge("auto_memory", END)
     
     graph.add_conditional_edges("get_git_diff", fan_out_reviews, ["review_file"])
     graph.add_edge("review_file", "summarize_review")
@@ -165,7 +173,8 @@ def create_graph():
     
     graph.add_conditional_edges("plan_project", fan_out_project_files, ["create_file"])
     graph.add_edge("create_file", "summarize_project")
-    graph.add_edge("summarize_project", END)
+    graph.add_edge("summarize_project", "auto_memory")
+    graph.add_edge("auto_memory", END)
     
     checkpointer = MemorySaver()
     store = get_memory_store()

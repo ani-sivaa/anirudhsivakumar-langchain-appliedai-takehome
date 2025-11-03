@@ -84,6 +84,8 @@ def route_approval(state: AgentState) -> str:
             return "recall"
         elif action == "project":
             return "project"
+        elif action == "project_context":
+            return "project_context"
         
         return "chat"
     
@@ -111,6 +113,8 @@ def route_after_approval(state: AgentState) -> str:
             return "recall"
         elif action == "project":
             return "project"
+        elif action == "project_context":
+            return "project_context"
         
         return "chat"
     
