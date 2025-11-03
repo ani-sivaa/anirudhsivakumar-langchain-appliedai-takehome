@@ -59,7 +59,7 @@ def auto_update_project_memory(state: AgentState) -> AgentState:
 def recall_project_context(state: AgentState) -> AgentState:
     """
     Retrieves stored project context from memory.
-    If no context exists, scans the project and stores it first.
+    Checks the codebase index first (from index_codebase), then falls back to auto-memory.
     
     Useful for:
     - "What files exist in this project?"
@@ -70,22 +70,54 @@ def recall_project_context(state: AgentState) -> AgentState:
         store = get_memory_store()
         user_id = state.get("user_id", "default_user")
         
-        # Get current project structure from memory
+        # First check if codebase has been indexed
+        codebase_index = list(store.search(("codebase", "index")))
+        
+        if codebase_index:
+            # Use the codebase index data
+            metadata = codebase_index[0]
+            meta_value = metadata.value if hasattr(metadata, 'value') else metadata
+            
+            # Get all indexed files
+            all_files = list(store.search(("codebase", "files")))
+            file_paths = [
+                (f.value if hasattr(f, 'value') else f).get('path', '')
+                for f in all_files
+            ]
+            
+            # Identify key files
+            key_files = [f for f in file_paths if any(k in f.lower() for k in 
+                        ['readme', 'main.py', 'graph.py', 'state.py', 'requirements', 'package.json'])]
+            
+            response = f"""
+Codebase Overview:
+
+Total Files: {meta_value.get('total_files', 0)} indexed
+Total Size: {meta_value.get('total_size', 0):,} bytes
+Workspace: {meta_value.get('workspace', 'Unknown')}
+Last Indexed: {meta_value.get('indexed_at', 'Unknown')}
+
+Key Files ({len(key_files)} found):
+{chr(10).join(f"  - {f}" for f in sorted(key_files)[:15])}
+
+All Files ({len(file_paths)} total):
+{chr(10).join(f"  - {f}" for f in sorted(file_paths)[:25])}
+{"  ... and more" if len(file_paths) > 25 else ""}
+
+Tip: Use 'search for X' to find specific functionality in the codebase!
+"""
+            
+            return {**state, "response": response}
+        
+        # Fallback to old auto-memory system
         items = list(store.search(("project", "structure")))
         
-        # If no context exists, scan the project now
         if not items:
-            memory_data = build_project_memory(user_id)
-            store.put(
-                namespace=tuple(memory_data['namespace']),
-                key="current_structure",
-                value=memory_data['memory']
-            )
-            context = memory_data['memory']
-        else:
-            latest = items[0]
-            # Handle both Item objects and dict results
-            context = latest.value if hasattr(latest, 'value') else latest
+            # Neither index exists - suggest indexing
+            return {**state, "response": "Codebase not indexed yet. Try: 'index the codebase' to make it searchable!"}
+        
+        latest = items[0]
+        context = latest.value if hasattr(latest, 'value') else latest
         
         response = f"""
 Project Context:
