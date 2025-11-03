@@ -1,3 +1,19 @@
+"""
+Code modification using LLM.
+
+DESIGN DECISION: Why LLM instead of AST manipulation?
+- Natural language instructions are intuitive ("add type hints")
+- LLM understands context and coding patterns
+- Works with any language (Python, JS, etc.), not just AST-parseable
+- Trade-off: Costs tokens, but gains massive flexibility
+
+DESIGN DECISION: Why validate Python syntax after generation?
+- LLMs can hallucinate invalid code
+- Catch syntax errors BEFORE writing to disk
+- Give user clean error instead of broken files
+- Only for Python files - other languages need their own validators
+"""
+
 from typing import Dict
 
 from agent.state import AgentState

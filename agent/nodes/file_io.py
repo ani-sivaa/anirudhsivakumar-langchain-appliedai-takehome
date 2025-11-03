@@ -1,3 +1,20 @@
+"""
+File I/O operations with security validation.
+
+DESIGN DECISION: Why separate read/write nodes instead of one "edit_file"?
+- Serial flow: read → modify → write is explicit and visible
+- Can checkpoint between each step (resume from any point)
+- Can interrupt before write for approval on sensitive files
+- Each function is testable in isolation
+- Parallel multi-file editing reuses these atomic operations
+
+DESIGN DECISION: Why path validation?
+- Security: Prevent path traversal attacks (../../etc/passwd)
+- All paths must be within workspace boundary
+- Fails fast with clear error messages
+- Better than dealing with corrupted system files
+"""
+
 from pathlib import Path
 from typing import Dict
 

@@ -1,4 +1,20 @@
 import uuid
+"""
+CLI Entry Point - Interactive REPL for the coding agent.
+
+DESIGN DECISION: Why streaming by default?
+- Shows agent's thinking process in real-time (each node as it executes)
+- Better UX - user sees progress, not just "loading..."
+- Can interrupt mid-execution (Ctrl+C) and resume later
+- Checkpoints saved after each node for precise resume points
+
+DESIGN DECISION: Why interrupt handling instead of just exiting?
+- Dangerous operations need approval (rm -rf, etc.)
+- interrupt() pauses graph, waits for user input
+- Can resume from exact same spot (thanks to SqliteSaver)
+- Makes the agent collaborative, not autonomous
+"""
+
 import typer
 from rich.console import Console
 from rich.panel import Panel
