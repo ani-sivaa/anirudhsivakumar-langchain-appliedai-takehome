@@ -59,6 +59,7 @@ def auto_update_project_memory(state: AgentState) -> AgentState:
 def recall_project_context(state: AgentState) -> AgentState:
     """
     Retrieves stored project context from memory.
+    If no context exists, scans the project and stores it first.
     
     Useful for:
     - "What files exist in this project?"
@@ -72,18 +73,27 @@ def recall_project_context(state: AgentState) -> AgentState:
         # Get current project structure from memory
         items = list(store.search(("project", "structure")))
         
-        if items:
-            latest = items[0]  # Most recent
+        # If no context exists, scan the project now
+        if not items:
+            memory_data = build_project_memory(user_id)
+            store.put(
+                namespace=tuple(memory_data['namespace']),
+                key="current_structure",
+                value=memory_data['memory']
+            )
+            context = memory_data['memory']
+        else:
+            latest = items[0]
             # Handle both Item objects and dict results
             context = latest.value if hasattr(latest, 'value') else latest
-            
-            response = f"""
-Project Context (from memory):
+        
+        response = f"""
+Project Context:
 
 Type: {context.get('project_type', 'Unknown')}
 Root: {context.get('project_root', 'Unknown')}
 Files: {context.get('file_count', 0)} tracked files
-Last Updated: {context.get('last_updated', 'Never')}
+Last Scanned: {context.get('last_updated', 'Just now')}
 
 Key Files:
 {chr(10).join(f"  - {f}" for f in context.get('key_files', [])[:10])}
@@ -92,10 +102,8 @@ All Files ({len(context.get('all_files', []))} total):
 {chr(10).join(f"  - {f}" for f in sorted(context.get('all_files', []))[:20])}
 {"  ... and more" if len(context.get('all_files', [])) > 20 else ""}
 """
-            
-            return {**state, "response": response}
-        else:
-            return {**state, "response": "No project context found in memory yet. I'll start tracking it after you edit or create files."}
+        
+        return {**state, "response": response}
     
     except Exception as e:
         return {**state, "response": f"Error retrieving project context: {str(e)}"}
