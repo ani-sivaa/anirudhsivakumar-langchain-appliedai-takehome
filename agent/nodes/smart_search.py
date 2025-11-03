@@ -19,22 +19,22 @@ def smart_search_codebase(state: AgentState) -> AgentState:
         store = get_memory_store()
         query = state.get("user_input", "")
         
-        # Search for relevant files - SQLiteStore.search() returns tuples (namespace, key, value, timestamp)
+        # Search for relevant files
+        # SQLiteStore.search() returns list of dicts: [{"key": "filename", "value": {...file data...}}, ...]
         search_results = store.search(("codebase", "files"))
         
         # Extract the value from each result
         all_file_data = []
         for result in search_results:
-            # SQLiteStore returns (namespace, key, value, timestamp) tuples
-            if isinstance(result, tuple) and len(result) >= 3:
-                value = result[2]  # Third element is the value
-                if value:
-                    all_file_data.append(value)
+            if isinstance(result, dict) and 'value' in result:
+                # SQLiteStore format: {"key": ..., "value": {...}}
+                all_file_data.append(result['value'])
             elif hasattr(result, 'value'):
-                if result.value:
-                    all_file_data.append(result.value)
-            elif isinstance(result, dict):
-                all_file_data.append(result)
+                # Item object format
+                all_file_data.append(result.value)
+        
+        # Filter out None values
+        all_file_data = [f for f in all_file_data if f is not None]
         
         if not all_file_data:
             return {**state, "response": "Codebase not indexed yet. Run: 'index the codebase' first!"}
