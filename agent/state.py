@@ -47,6 +47,11 @@ class AgentState(TypedDict, total=False):
     shell_output: str  # stdout/stderr from command
     return_code: int  # Exit code: 0 = success
     
+    # === AUTO-HEAL & INSTALL ===
+    package_to_install: str  # Package name for pip install: "numpy"
+    retry_count: int  # How many times we've retried (prevent infinite loops)
+    original_command: str  # Command to re-run after installing dependency
+    
     # === PR REVIEW (parallel: per-file reviews then aggregate) ===
     base_branch: str  # Branch to compare against: "main"
     head_branch: str  # Branch with changes: "feature-branch"
