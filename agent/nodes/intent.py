@@ -136,7 +136,7 @@ IMPORTANT: When user says "these files" or "those files" or "all files", look at
                 role = msg.get("role", "user")
                 content = msg.get("content", "")
                 # Keep file paths visible - don't truncate if it contains common file extensions or "Created"
-                if len(content) > 300 and not any(marker in content for marker in ['.py', '.md', '.js', 'Created', '✓']):
+                if len(content) > 300 and not any(marker in content for marker in ['.py', '.md', '.js', 'Created', 'SUCCESS']):
                     content = content[:300] + "..."
                 context_lines.append(f"{role}: {content}")
         

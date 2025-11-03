@@ -73,7 +73,7 @@ def demo_time_travel():
         {"user_input": "Hello! What can you do?"},
         config=config
     )
-    console.print(f"[green]✓ Response: {result.get('response', 'N/A')[:100]}...[/green]")
+    console.print(f"[green]Response: {result.get('response', 'N/A')[:100]}...[/green]")
     
     # Step 2: Show checkpoint history
     console.print("\n[bold]Step 2: Viewing checkpoint history...[/bold]")
