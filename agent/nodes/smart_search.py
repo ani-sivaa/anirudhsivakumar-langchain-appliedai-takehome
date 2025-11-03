@@ -22,8 +22,20 @@ def smart_search_codebase(state: AgentState) -> AgentState:
         # Search for relevant files
         all_files = list(store.search(("codebase", "files")))
         
+        print(f"DEBUG: Retrieved {len(all_files)} items from store")
+        
         if not all_files:
             return {**state, "response": "Codebase not indexed yet. Run: 'index the codebase' first!"}
+        
+        # Debug first item
+        if all_files:
+            first = all_files[0]
+            print(f"DEBUG: First item type: {type(first)}")
+            print(f"DEBUG: First item dir: {dir(first)[:10]}")
+            if hasattr(first, 'value'):
+                print(f"DEBUG: First item.value type: {type(first.value)}")
+                print(f"DEBUG: First item.value: {first.value}")
+            print(f"DEBUG: First item as is: {first}")
         
         # Convert to list of dicts
         all_file_data = []
@@ -33,11 +45,11 @@ def smart_search_codebase(state: AgentState) -> AgentState:
             elif isinstance(item, dict):
                 all_file_data.append(item)
             else:
-                # Debug: print what we got
                 print(f"DEBUG: Unexpected item type: {type(item)}, value: {item}")
         
         # Filter out None values
         all_file_data = [f for f in all_file_data if f is not None]
+        print(f"DEBUG: Processed {len(all_file_data)} valid file entries")
         
         # For general questions, prioritize key files
         general_questions = ['what', 'tell me', 'explain', 'describe', 'overview', 'about']
