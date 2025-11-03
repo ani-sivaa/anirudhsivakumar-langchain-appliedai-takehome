@@ -70,7 +70,7 @@ def recall_project_context(state: AgentState) -> AgentState:
         user_id = state.get("user_id", "default_user")
         
         # Get current project structure from memory
-        items = store.search(namespace_prefix=("project", "structure"))
+        items = list(store.search(("project", "structure")))
         
         if items:
             latest = items[0]  # Most recent
