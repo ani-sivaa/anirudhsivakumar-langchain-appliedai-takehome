@@ -40,7 +40,7 @@ class AgentState(TypedDict, total=False):
     paths: List[str]  # Multiple files: ["a.py", "b.py", "c.py"]
     contents: Annotated[Dict[str, str], merge_dicts]  # {path: content} - merge_dicts combines from parallel reads
     modifications: Annotated[Dict[str, str], merge_dicts]  # {path: modified_content} - from parallel modifies
-    edit_results: Annotated[List[str], add]  # ["✓ a.py", "✓ b.py"] - add reducer collects results
+    edit_results: Annotated[List[str], add]  # ["SUCCESS: a.py", "SUCCESS: b.py"] - add reducer collects results
     
     # === SHELL EXECUTION ===
     command: str  # Shell command: "ls -la"
