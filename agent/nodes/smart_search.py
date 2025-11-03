@@ -47,9 +47,9 @@ def smart_search_codebase(state: AgentState) -> AgentState:
                 top_files = top_files[:5]
         else:
             # For specific queries, search based on keywords
-            matching_files = []
             keywords = [w for w in query.lower().split() if len(w) > 3]
             
+            matching_files = []
             for file_data in all_file_data:
                 searchable = f"{file_data.get('path', '')} {file_data.get('summary', '')} {file_data.get('content', '')}".lower()
                 
@@ -67,6 +67,10 @@ def smart_search_codebase(state: AgentState) -> AgentState:
                 # Fallback to key files if no matches
                 priority_patterns = ['readme', 'graph.py', 'state.py']
                 top_files = [f for f in all_file_data if any(p in f.get('path', '').lower() for p in priority_patterns)][:3]
+        
+        # Ensure we have something to show
+        if not top_files:
+            top_files = all_file_data[:5]
         
         # Build context from matching files
         context_parts = []
@@ -101,7 +105,7 @@ Relevant code:
         explanation = llm.invoke(prompt=user_prompt, system_prompt=system_prompt)
         
         # Format final response
-        response = f"Found {len(matching_files)} relevant files. Here's what I found:\n\n{explanation}\n\n"
+        response = f"{explanation}\n\n"
         response += f"Files examined:\n"
         for f in top_files:
             response += f"  - {f.get('path')} ({f.get('lines')} lines)\n"
