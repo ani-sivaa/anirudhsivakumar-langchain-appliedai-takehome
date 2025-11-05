@@ -2,20 +2,19 @@
 Codebase Chat Node
 
 This module implements RAG (Retrieval-Augmented Generation) for answering
-questions about the codebase.
+questions about the codebase using LangChain's vector store.
 
 Design decisions:
-- Uses semantic search to find relevant files
-- Retrieves top 5 most relevant files
-- Provides file content to LLM as context
-- LLM generates natural language explanation
-- Falls back gracefully if Pinecone not configured
+- Uses LangChain's similarity_search for retrieval
+- Simple and clean integration
+- LLM generates answers based on retrieved code
+- Falls back gracefully if no results found
 
 Architecture:
 1. User asks: "how does the graph work?"
-2. Semantic search finds relevant files (agent/graph.py, etc.)
-3. File contents are retrieved from SQLite
-4. LLM reads the code and explains it in natural language
+2. Vector store finds similar documents (files)
+3. LLM reads the code and explains it
+4. Return natural language explanation
 
 This is a classic RAG pattern: Retrieve → Generate
 """
@@ -30,8 +29,6 @@ def index_codebase_node(state: AgentState) -> Dict:
     """
     Index the entire codebase for semantic search.
 
-    This node is called when user requests to index the codebase.
-
     Args:
         state: Agent state
 
@@ -39,23 +36,17 @@ def index_codebase_node(state: AgentState) -> Dict:
         Updated state with response message
     """
     try:
-        # Get workspace root (default to current directory)
         workspace = state.get("workspace", ".")
-
-        # Index the codebase
         result = index_codebase(workspace)
 
         if "error" in result:
             response = f"Error indexing codebase: {result['error']}"
         else:
             total_files = result.get("total_files", 0)
-            total_size = result.get("total_size", 0)
-
-            response = f"Indexed {total_files} files ({total_size:,} bytes)\n\n"
-            response += "You can now ask questions about the codebase using semantic search.\n\n"
-            response += "Try asking:\n"
+            response = f"Indexed {total_files} files for semantic search.\n\n"
+            response += "You can now ask questions like:\n"
             response += "- 'how does the graph work?'\n"
-            response += "- 'where is error handling implemented?'\n"
+            response += "- 'where is error handling?'\n"
             response += "- 'explain the memory system'"
 
         return {
@@ -66,14 +57,13 @@ def index_codebase_node(state: AgentState) -> Dict:
     except Exception as e:
         error_msg = f"Error indexing codebase: {str(e)}"
 
-        # Check for common Pinecone errors
         if "dimension" in str(e).lower():
-            error_msg += "\n\nDimension mismatch detected. Your Pinecone index may have the wrong dimensions.\n"
+            error_msg += "\n\nDimension mismatch! Your Pinecone index has wrong dimensions.\n"
             error_msg += "OpenAI text-embedding-ada-002 requires 1536 dimensions.\n\n"
             error_msg += "To fix:\n"
             error_msg += "1. Go to https://app.pinecone.io\n"
             error_msg += "2. Delete your current index\n"
-            error_msg += "3. Restart the agent (it will create a new index with correct dimensions)"
+            error_msg += "3. Create new index with 1536 dimensions"
 
         return {
             "response": error_msg,
@@ -84,22 +74,21 @@ def index_codebase_node(state: AgentState) -> Dict:
 
 def chat_about_codebase(state: AgentState) -> Dict:
     """
-    Answer questions about the codebase using semantic search and LLM.
+    Answer questions about the codebase using RAG.
 
-    This implements the RAG pattern:
-    1. Retrieve: Use semantic search to find relevant files
-    2. Augment: Provide file contents as context
-    3. Generate: LLM explains based on the code
+    Process:
+    1. Retrieve: Semantic search finds relevant files
+    2. Generate: LLM explains based on code
 
     Args:
         state: Agent state with user input
 
     Returns:
-        Updated state with response message
+        Updated state with response
 
     Example:
         User: "how does the graph work?"
-        1. Semantic search finds: agent/graph.py, agent/state.py
+        1. Search finds agent/graph.py
         2. LLM reads the code
         3. LLM explains: "The graph uses LangGraph's StateGraph..."
     """
@@ -113,31 +102,28 @@ def chat_about_codebase(state: AgentState) -> Dict:
 
     try:
         # Semantic search for relevant files
-        results = search_codebase(query=user_input, limit=5)
+        results = search_codebase(query=user_input, k=5)
 
         if not results:
-            response = "No relevant files found in the codebase.\n\n"
-            response += "Make sure you've indexed the codebase first by saying:\n"
-            response += "'index the codebase' or 'index project files'"
+            response = "No relevant files found.\n\n"
+            response += "Make sure you've indexed the codebase first:\n"
+            response += "Say 'index the codebase' to get started."
 
             return {
                 "response": response,
                 "messages": [{"role": "assistant", "content": response}]
             }
 
-        # Build context from retrieved files
-        context_parts = []
-        context_parts.append("Here are the relevant files I found:\n")
+        # Build context from retrieved documents
+        context_parts = ["Here are the relevant files:\n"]
 
-        for i, file_data in enumerate(results, 1):
-            metadata = file_data.get('metadata', {})
-            path = metadata.get('path', 'unknown')
-            content = file_data.get('content', '')
-            score = file_data.get('score', 0.0)
+        for i, doc in enumerate(results, 1):
+            path = doc.metadata.get('path', 'unknown')
+            content = doc.page_content
 
-            context_parts.append(f"\n--- File {i}: {path} (relevance: {score:.2f}) ---")
+            context_parts.append(f"\n--- File {i}: {path} ---")
 
-            # Truncate content if too long (keep first 1500 chars)
+            # Truncate if too long
             if len(content) > 1500:
                 content = content[:1500] + "\n... (truncated)"
 
@@ -178,18 +164,17 @@ Please answer this question:
     except Exception as e:
         error_msg = f"Error searching codebase: {str(e)}"
 
-        # Check for common Pinecone errors
         if "dimension" in str(e).lower():
-            error_msg += "\n\nDimension mismatch detected. Your Pinecone index may have the wrong dimensions.\n"
+            error_msg += "\n\nDimension mismatch! Your Pinecone index has wrong dimensions.\n"
             error_msg += "OpenAI text-embedding-ada-002 requires 1536 dimensions.\n\n"
             error_msg += "To fix:\n"
             error_msg += "1. Go to https://app.pinecone.io\n"
             error_msg += "2. Delete your current index\n"
-            error_msg += "3. Restart the agent (it will create a new index with correct dimensions)"
+            error_msg += "3. Create new index with 1536 dimensions"
         elif "pinecone" in str(e).lower() or "api_key" in str(e).lower():
-            error_msg += "\n\nPinecone not configured properly.\n"
-            error_msg += "Make sure PINECONE_API_KEY is set in your .env file.\n"
-            error_msg += "Get your API key at: https://app.pinecone.io"
+            error_msg += "\n\nPinecone not configured.\n"
+            error_msg += "Make sure PINECONE_API_KEY is set in .env\n"
+            error_msg += "Get API key at: https://app.pinecone.io"
 
         return {
             "response": error_msg,
