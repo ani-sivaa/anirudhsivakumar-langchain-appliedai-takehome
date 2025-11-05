@@ -69,7 +69,7 @@ def route_approval(state: AgentState) -> str:
     """Routes to either the action or approval request based on whether approval is needed."""
     if not state.get("approval_required", False):
         action = state.get("action", "chat")
-        
+
         if action == "shell":
             return "shell"
         elif action == "edit":
@@ -88,19 +88,23 @@ def route_approval(state: AgentState) -> str:
             return "project"
         elif action == "project_context":
             return "project_context"
-        
+        elif action == "index_codebase":
+            return "index_codebase"
+        elif action == "ask_codebase":
+            return "ask_codebase"
+
         return "chat"
-    
+
     return "request_approval"
 
 
 def route_after_approval(state: AgentState) -> str:
     """Routes based on user's approval decision - either proceed or go to denied node."""
     approval = state.get("approval_response", "deny")
-    
+
     if approval == "approve":
         action = state.get("action", "chat")
-        
+
         if action == "shell":
             return "shell"
         elif action == "edit":
@@ -119,9 +123,13 @@ def route_after_approval(state: AgentState) -> str:
             return "project"
         elif action == "project_context":
             return "project_context"
-        
+        elif action == "index_codebase":
+            return "index_codebase"
+        elif action == "ask_codebase":
+            return "ask_codebase"
+
         return "chat"
-    
+
     return "denied"
 
 
