@@ -12,6 +12,11 @@ rich>=13.9.2
 # Repo & shell helpers
 GitPython>=3.1.43
 
+# Vector store & embeddings
+pinecone>=5.0.0
+langchain-openai>=0.1.0
+numpy>=1.24.0
+
 # Dev tools
 black>=24.8.0
 ruff>=0.6.9

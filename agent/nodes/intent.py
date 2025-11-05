@@ -34,6 +34,8 @@ Available actions:
 - "remember": Save information to long-term memory
 - "recall": Retrieve information from long-term memory
 - "project_context": Get current project structure and file list from memory
+- "index_codebase": Index the entire codebase for semantic search
+- "ask_codebase": Ask questions about the codebase using semantic search
 
 IMPORTANT: Use "chat" for:
 - Questions (how, what, why, can you, etc.)
@@ -82,6 +84,16 @@ Use "project_context" for:
 - Asking about the current project structure
 - "what files exist?", "show me the project structure", "what did we build?", "list all files"
 
+Use "index_codebase" for:
+- Indexing the project for semantic search
+- "index the codebase", "index project files", "build codebase index"
+
+Use "ask_codebase" for:
+- Questions about how the codebase works
+- "how does the graph work?", "where is error handling?", "explain the memory system"
+- "what does this project do?", "how is X implemented?"
+- Technical questions about code architecture or implementation
+
 When user says "write it" or "save it", look at conversation history to understand what content they're referring to.
 
 Extract relevant information:
@@ -96,7 +108,7 @@ Extract relevant information:
 
 Respond with valid JSON only:
 {
-    "action": "chat|edit|edit_multi|project|shell|install|review|remember|recall|project_context",
+    "action": "chat|edit|edit_multi|project|shell|install|review|remember|recall|project_context|index_codebase|ask_codebase",
     "path": "file path" (for edit),
     "paths": ["file1.py", "file2.py"] (for edit_multi),
     "edit_instruction": "what to write or change" (for edit or edit_multi),
@@ -125,6 +137,10 @@ Examples:
 - "what's my name?" → {"action": "recall", "memory_key": "name"}
 - "what files exist in this project?" → {"action": "project_context"}
 - "show me the project structure" → {"action": "project_context"}
+- "index the codebase" → {"action": "index_codebase"}
+- "how does the graph work?" → {"action": "ask_codebase"}
+- "explain the memory system" → {"action": "ask_codebase"}
+- "where is error handling implemented?" → {"action": "ask_codebase"}
 
 IMPORTANT: When user says "these files" or "those files" or "all files", look at the recent conversation context to find which specific files they're referring to. Extract the actual file paths from previous messages."""
         
@@ -218,5 +234,9 @@ def route_action(state: AgentState) -> str:
         return "recall"
     elif action == "project_context":
         return "project_context"
-    
+    elif action == "index_codebase":
+        return "index_codebase"
+    elif action == "ask_codebase":
+        return "ask_codebase"
+
     return "chat"
