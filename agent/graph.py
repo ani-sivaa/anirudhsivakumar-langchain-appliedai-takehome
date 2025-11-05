@@ -19,6 +19,7 @@ from agent.nodes.memory_ops import save_user_memory, recall_user_memory
 from agent.nodes.project import plan_project, create_project_file, summarize_project
 from agent.nodes.approval import check_approval_needed, request_approval, route_approval, route_after_approval, handle_denial
 from agent.nodes.auto_memory_update import auto_update_project_memory, recall_project_context
+from agent.nodes.codebase_chat import chat_about_codebase, index_codebase_node
 from agent.tools.memory import get_memory_store
 
 
@@ -110,7 +111,9 @@ def create_graph():
     graph.add_node("summarize_project", summarize_project)
     graph.add_node("auto_memory", auto_update_project_memory)
     graph.add_node("project_context", recall_project_context)
-    
+    graph.add_node("index_codebase", index_codebase_node)
+    graph.add_node("ask_codebase", chat_about_codebase)
+
     graph.add_edge(START, "determine_intent")
     graph.add_edge("determine_intent", "check_approval")
     
@@ -128,6 +131,8 @@ def create_graph():
             "recall": "recall_memory",
             "project": "plan_project",
             "project_context": "project_context",
+            "index_codebase": "index_codebase",
+            "ask_codebase": "ask_codebase",
             "request_approval": "request_approval"
         }
     )
@@ -146,6 +151,8 @@ def create_graph():
             "recall": "recall_memory",
             "project": "plan_project",
             "project_context": "project_context",
+            "index_codebase": "index_codebase",
+            "ask_codebase": "ask_codebase",
             "denied": "denied"
         }
     )
@@ -155,6 +162,8 @@ def create_graph():
     graph.add_edge("recall_memory", END)
     graph.add_edge("denied", END)
     graph.add_edge("project_context", END)
+    graph.add_edge("index_codebase", END)
+    graph.add_edge("ask_codebase", END)
     
     graph.add_edge("read_file", "modify_code")
     graph.add_edge("modify_code", "write_file")
