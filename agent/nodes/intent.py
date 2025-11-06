@@ -47,6 +47,8 @@ Use "edit" for:
 - Single file editing or creation
 - "write it to [filename]" or "save it as [filename]" when referring to previously discussed content
 - "edit [filename]" or "create [filename]" (single file)
+- "look at the portfolio folder and style the css" - extract the actual file path like "portfolio/styles/style.css"
+- When user mentions a directory, find the relevant file within it (e.g., "portfolio folder" + "style css" → "portfolio/styles/style.css")
 
 Use "edit_multi" for:
 - Editing multiple existing files with the same instruction

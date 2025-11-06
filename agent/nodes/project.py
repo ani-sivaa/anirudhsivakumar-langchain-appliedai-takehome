@@ -98,7 +98,7 @@ Generate the complete file content:"""
             syntax_error = validate_python_syntax(content)
             if syntax_error:
                 return {
-                    "messages": [{"role": "assistant", "content": f"✗ {file_path}: {syntax_error}"}],
+                    "messages": [{"role": "assistant", "content": f"FAIL: {file_path} - {syntax_error}"}],
                     "error": f"Syntax error in generated file: {syntax_error}"
                 }
         
@@ -108,7 +108,7 @@ Generate the complete file content:"""
             f.write(content)
         
         return {
-            "messages": [{"role": "assistant", "content": f"✓ {file_path}"}]
+            "messages": [{"role": "assistant", "content": f"SUCCESS: {file_path}"}]
         }
         
     except Exception as e:
@@ -122,7 +122,7 @@ def summarize_project(state: AgentState) -> Dict:
     project_files = state.get("project_files", [])
     messages = state.get("messages", [])
     
-    created_files = [msg.get("content", "") for msg in messages if msg.get("content", "").startswith("✓")]
+    created_files = [msg.get("content", "") for msg in messages if msg.get("content", "").startswith("SUCCESS:")]
     
     if not created_files:
         return {

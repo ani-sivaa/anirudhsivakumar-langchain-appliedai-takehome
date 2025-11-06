@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Dict
 
 from agent.state import AgentState
+from agent.tools.path_resolver import resolve_path
 
 
 WORKSPACE_ROOT = Path.cwd()
@@ -26,30 +27,51 @@ def read_file(state: AgentState) -> Dict:
     """
     Reads a file and puts the content into state.
     Used in the single-file edit flow.
+
+    Includes fuzzy path matching to handle typos automatically.
     """
     path = state.get("path", "")
-    
+
     if not path:
         return {"error": "No file path specified"}
-    
+
+    # Try to resolve typos in the path
+    resolved_path, suggestion = resolve_path(path, auto_correct=True)
+
+    # If path was corrected, use the corrected version
+    if suggestion:
+        # Update state with corrected path so downstream nodes use it
+        state["path"] = resolved_path
+        path = resolved_path
+
     is_valid, error_msg = validate_path(path)
     if not is_valid:
         return {"error": error_msg}
-    
+
     try:
         file_path = Path(path).resolve()
-        
+
         if not file_path.exists():
-            return {"error": f"File not found: {path}"}
-        
+            # If still not found after correction, give helpful error
+            error = f"File not found: {path}"
+            if suggestion:
+                error += f"\n{suggestion}"
+            return {"error": error}
+
         if not file_path.is_file():
             return {"error": f"Not a file: {path}"}
-        
+
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
-        
-        return {"content": content, "error": ""}
-        
+
+        result = {"content": content, "error": ""}
+
+        # If we auto-corrected a typo, add a note to the response
+        if suggestion:
+            result["response"] = suggestion
+
+        return result
+
     except Exception as e:
         return {"error": f"Error reading file {path}: {str(e)}"}
 
@@ -124,7 +146,7 @@ def read_file_multi(state: AgentState) -> Dict:
 def write_file_multi(state: AgentState) -> Dict:
     """
     Writes one file when editing multiple files in parallel.
-    Each instance writes its file and adds a result like "✓ file.py" to the list.
+    Each instance writes its file and adds a result like "SUCCESS: file.py" to the list.
     """
     path = state.get("path", "")
     modifications = state.get("modifications", {})
@@ -134,32 +156,33 @@ def write_file_multi(state: AgentState) -> Dict:
     contents_keys = list(state.get("contents", {}).keys()) if state.get("contents") else []
     
     if not path:
-        return {"edit_results": [f"✗ Unknown: No path. State keys: {all_state_keys[:10]}"]}
-    
+        return {"edit_results": [f"FAIL: Unknown - No path. State keys: {all_state_keys[:10]}"]}
+
     is_valid, error_msg = validate_path(path)
     if not is_valid:
-        return {"edit_results": [f"✗ {path}: {error_msg}"]}
-    
+        return {"edit_results": [f"FAIL: {path} - {error_msg}"]}
+
     if not modifications:
-        return {"edit_results": [f"✗ {path}: modifications is empty/None. State keys: {all_state_keys[:10]}, contents keys: {contents_keys[:5]}"]}
-    
+        return {"edit_results": [f"FAIL: {path} - modifications is empty/None. State keys: {all_state_keys[:10]}, contents keys: {contents_keys[:5]}"]}
+
     if path not in modifications:
-        return {"edit_results": [f"✗ {path}: Path not in modifications. Has: {list(modifications.keys())[:5]}"]}
-    
+        return {"edit_results": [f"FAIL: {path} - Path not in modifications. Has: {list(modifications.keys())[:5]}"]}
+
     content = modifications[path]
-    
+
     # If content is an error message from previous stages, don't write it
     if isinstance(content, str) and content.startswith("ERROR:"):
-        return {"edit_results": [f"✗ {path}: {content}"]}
-    
+        return {"edit_results": [f"FAIL: {path} - {content}"]}
+
     try:
         file_path = Path(path).resolve()
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
-        
-        return {"edit_results": [f"✓ {path}"]}
-        
+
+        return {"edit_results": [f"SUCCESS: {path}"]}
+
     except Exception as e:
-        return {"edit_results": [f"✗ {path}: {str(e)}"]}
+        return {"edit_results": [f"FAIL: {path} - {str(e)}"]}
+
