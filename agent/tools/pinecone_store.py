@@ -69,10 +69,11 @@ def get_pinecone_vector_store(
         # Verify index exists and check dimensions
         stats = index.describe_index_stats()
         if stats.dimension != 1536:
-            print(f"\nWARNING: Index dimension is {stats.dimension}, expected 1536")
-            print(f"OpenAI text-embedding-ada-002 requires 1536 dimensions")
-            print(f"You may need to recreate your Pinecone index")
-            print()
+            raise ValueError(
+                f"Index dimension is {stats.dimension}, expected 1536. "
+                f"OpenAI text-embedding-ada-002 requires 1536 dimensions. "
+                f"Please recreate your Pinecone index with correct dimensions."
+            )
     except Exception as e:
         raise ValueError(f"Could not connect to Pinecone index '{index_name}': {e}")
 

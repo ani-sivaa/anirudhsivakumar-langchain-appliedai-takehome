@@ -18,8 +18,8 @@ def summarize_multi_edit(state: AgentState) -> Dict:
             "messages": [{"role": "assistant", "content": "Multi-file edit completed"}]
         }
     
-    success_count = sum(1 for r in edit_results if r.startswith("✓"))
-    failure_count = sum(1 for r in edit_results if r.startswith("✗"))
+    success_count = sum(1 for r in edit_results if r.startswith("SUCCESS:"))
+    failure_count = sum(1 for r in edit_results if r.startswith("FAIL:"))
     
     summary_lines = [f"Multi-file edit complete: {len(paths)} file(s) processed"]
     summary_lines.append("")

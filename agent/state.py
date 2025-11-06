@@ -23,7 +23,7 @@ class AgentState(TypedDict, total=False):
     # === USER I/O ===
     # What the user sends in and what we send back
     user_input: str  # The user's request: "Add type hints to utils.py"
-    response: Annotated[str, add]  # Our response - add reducer lets parallel nodes append to it
+    response: str  # Our response - each node sets this fresh (no accumulation)
     messages: Annotated[List[Dict[str, str]], add]  # Full chat history: [{role: "user", content: "hi"}]
     
     # === ROUTING ===

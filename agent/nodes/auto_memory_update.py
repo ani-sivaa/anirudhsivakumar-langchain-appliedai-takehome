@@ -51,8 +51,8 @@ def auto_update_project_memory(state: AgentState) -> AgentState:
         
     except Exception as e:
         # Silent failure - don't break the workflow if memory update fails
-        print(f"Auto-memory update failed: {e}")
-    
+        pass
+
     return state
 
 

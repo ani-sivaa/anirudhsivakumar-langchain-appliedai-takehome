@@ -123,7 +123,6 @@ def file_to_document(file_path: Path, workspace_root: Path) -> Optional[Document
         return doc
 
     except Exception as e:
-        print(f"Error reading {file_path}: {e}")
         return None
 
 
@@ -151,8 +150,6 @@ def index_codebase(workspace_root: str = ".") -> Dict[str, Any]:
             "total_files": 0
         }
 
-    print(f"Indexing codebase: {workspace_path}")
-
     # Collect all documents
     documents = []
 
@@ -166,15 +163,12 @@ def index_codebase(workspace_root: str = ".") -> Dict[str, Any]:
         doc = file_to_document(file_path, workspace_path)
         if doc:
             documents.append(doc)
-            print(f"  Found: {doc.metadata['path']}")
 
     if not documents:
         return {
             "error": "No files found to index",
             "total_files": 0
         }
-
-    print(f"\nIndexing {len(documents)} documents in Pinecone...")
 
     try:
         # Get vector store
@@ -183,8 +177,6 @@ def index_codebase(workspace_root: str = ".") -> Dict[str, Any]:
         # Add all documents (LangChain handles embedding + storage)
         vector_store.add_documents(documents)
 
-        print(f"Successfully indexed {len(documents)} files")
-
         return {
             'total_files': len(documents),
             'workspace': str(workspace_path)
@@ -192,17 +184,6 @@ def index_codebase(workspace_root: str = ".") -> Dict[str, Any]:
 
     except Exception as e:
         error_msg = f"Error indexing documents: {str(e)}"
-        print(error_msg)
-
-        # Check for dimension mismatch
-        if "dimension" in str(e).lower():
-            print("\nDimension mismatch detected!")
-            print("Your Pinecone index may have wrong dimensions.")
-            print("OpenAI text-embedding-ada-002 requires 1536 dimensions.")
-            print("\nTo fix:")
-            print("1. Go to https://app.pinecone.io")
-            print("2. Delete your current index")
-            print("3. Create a new index with 1536 dimensions")
 
         return {
             "error": error_msg,
@@ -232,23 +213,4 @@ def search_codebase(query: str, k: int = 5) -> List[Document]:
         results = vector_store.similarity_search(query, k=k)
         return results
     except Exception as e:
-        print(f"Error searching codebase: {e}")
         return []
-
-
-def clear_codebase_index() -> bool:
-    """
-    Clear all indexed codebase files from Pinecone.
-
-    Returns:
-        True if successful
-    """
-    try:
-        vector_store = get_cached_vector_store(namespace="codebase")
-        # Pinecone doesn't have a direct "clear namespace" in LangChain
-        # This would require using the Pinecone client directly
-        print("Note: Clear operation requires manual deletion via Pinecone console")
-        return False
-    except Exception as e:
-        print(f"Error clearing index: {e}")
-        return False

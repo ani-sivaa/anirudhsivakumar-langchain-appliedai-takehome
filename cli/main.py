@@ -7,14 +7,26 @@ from rich.text import Text
 from agent.graph import agent_graph
 from agent.tools.checkpoint_manager import should_resume, get_resume_info
 from agent.tools.memory import get_memory_stats
+from agent.tools.codebase_indexer import index_codebase, search_codebase
 
 
 console = Console()
 
 
+def auto_index_codebase():
+    """Auto-index the codebase on startup."""
+    console.print("[dim yellow]Indexing codebase for semantic search...[/dim yellow]")
+    result = index_codebase(".")
+
+    if result.get("error"):
+        console.print(f"[dim red]Indexing failed: {result['error']}[/dim red]")
+    else:
+        console.print(f"[dim green]Indexed {result.get('total_files', 0)} files successfully[/dim green]")
+
+
 def main():
     title = Text("Anicode(A coding Agent that uses the LangGraph framework)", style="bold magenta blink")
-    
+
     description = Text(
         "Hey Brace & Palash! This agent can edit files, have conversations about code, and answer questions.\n"
         "My approach: Leveraging LangGraph's full capabilities including serial nodes, parallel execution, conditional edges, and reducers to build a sophisticated agent architecture.\n"
@@ -22,19 +34,22 @@ def main():
         style="bright_cyan"
     )
     subtitle = Text("Type 'exit' to quit | Ctrl+C to interrupt (auto-resumes on next message)", style="bright_cyan")
-    
+
     console.print(Panel.fit(
         Text.assemble(title, "\n", description, "\n", subtitle),
         border_style="bright_magenta"
     ))
-    
+
     memory_stats = get_memory_stats()
     if memory_stats.get("persistent"):
         console.print(f"[dim green]Long-term memory: SQLite ({memory_stats.get('db_path')})[/dim green]")
         console.print(f"[dim green]   {memory_stats.get('total_entries', 0)} entries, {memory_stats.get('total_namespaces', 0)} namespaces[/dim green]")
     else:
         console.print(f"[dim yellow]Long-term memory: In-memory (data lost on restart)[/dim yellow]")
-    
+
+    # Auto-index codebase on startup
+    auto_index_codebase()
+
     session_id = str(uuid.uuid4())
     config = {"configurable": {"thread_id": session_id}}
     
