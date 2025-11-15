@@ -1,3 +1,4 @@
+import sqlite3
 from langgraph.graph import StateGraph, END, START
 from langgraph.types import Send
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -200,7 +201,8 @@ def create_graph():
     graph.add_edge("prepare_retry", "install")
     graph.add_edge("install", "shell")  # Retry the command after install
     
-    checkpointer = SqliteSaver.from_conn_string("./data/checkpoints.db")
+    conn = sqlite3.connect("./data/checkpoints.db", check_same_thread=False)
+    checkpointer = SqliteSaver(conn)
     store = get_memory_store()
     return graph.compile(checkpointer=checkpointer, store=store)
 
