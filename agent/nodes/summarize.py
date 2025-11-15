@@ -10,11 +10,15 @@ def summarize_review(state: AgentState) -> Dict:
     If there's more than one file, uses LLM to make it cohesive.
     """
     review_comments = state.get("review_comments", [])
+    user_input = state.get("user_input", "")
     
     if not review_comments:
         return {
             "review_summary": "No review comments available.",
-            "messages": [{"role": "assistant", "content": "Review complete: No changes to review."}]
+            "messages": [
+                {"role": "user", "content": user_input},
+                {"role": "assistant", "content": "Review complete: No changes to review."}
+            ]
         }
     
     if len(review_comments) == 1:
@@ -22,7 +26,10 @@ def summarize_review(state: AgentState) -> Dict:
         return {
             "review_summary": summary,
             "error": "",
-            "messages": [{"role": "assistant", "content": summary}]
+            "messages": [
+                {"role": "user", "content": user_input},
+                {"role": "assistant", "content": summary}
+            ]
         }
     
     try:
@@ -50,7 +57,10 @@ Provide a structured summary:"""
         return {
             "review_summary": summary,
             "error": "",
-            "messages": [{"role": "assistant", "content": summary}]
+            "messages": [
+                {"role": "user", "content": user_input},
+                {"role": "assistant", "content": summary}
+            ]
         }
         
     except Exception as e:
@@ -58,6 +68,9 @@ Provide a structured summary:"""
         return {
             "review_summary": summary,
             "error": f"Summary generation failed ({str(e)})",
-            "messages": [{"role": "assistant", "content": summary}]
+            "messages": [
+                {"role": "user", "content": user_input},
+                {"role": "assistant", "content": summary}
+            ]
         }
 

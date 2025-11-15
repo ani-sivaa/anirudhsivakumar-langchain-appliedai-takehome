@@ -121,6 +121,7 @@ def summarize_project(state: AgentState) -> Dict:
     """
     project_files = state.get("project_files", [])
     messages = state.get("messages", [])
+    user_input = state.get("user_input", "")
     
     created_files = [msg.get("content", "") for msg in messages if msg.get("content", "").startswith("SUCCESS:")]
     
@@ -134,7 +135,10 @@ def summarize_project(state: AgentState) -> Dict:
     
     return {
         "response": summary,
-        "messages": [{"role": "assistant", "content": summary}],
+        "messages": [
+            {"role": "user", "content": user_input},
+            {"role": "assistant", "content": summary}
+        ],
         "error": ""
     }
 
