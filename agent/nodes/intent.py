@@ -42,6 +42,8 @@ IMPORTANT: Use "chat" for:
 - Greetings (hello, hi, hey)
 - Clarifications
 - General conversation
+- Questions about conversation history or what was done in this thread
+- "what were we working on?", "what did we build?", "what project are we on?"
 
 Use "edit" for:
 - Single file editing or creation
@@ -83,8 +85,8 @@ Use "recall" for:
 - "what's my name?", "what do I prefer?", "what did I tell you about X?"
 
 Use "project_context" for:
-- Asking about the current project structure
-- "what files exist?", "show me the project structure", "what did we build?", "list all files"
+- Asking about the current project structure (file listing only, not conversation history)
+- "what files exist?", "show me the project structure", "list all files"
 
 Use "index_codebase" for:
 - Indexing the project for semantic search
