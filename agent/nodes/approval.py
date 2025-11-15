@@ -54,15 +54,27 @@ def request_approval(state: AgentState) -> Dict:
     """
     Pauses execution to ask the user for approval.
     Uses LangGraph's interrupt() to wait for user input.
+    
+    Note: The interrupt() will cause the graph to pause. When resumed via
+    update_state() with approval_response, this node completes and returns
+    that response for routing.
     """
     approval_request = state.get("approval_request", {})
     
     if not approval_request:
         return {"approval_response": "approve"}
     
-    approval = interrupt(approval_request)
+    # Check if we already have a response (from update_state)
+    existing_response = state.get("approval_response")
+    if existing_response:
+        # Already decided, just return it
+        return {"approval_response": existing_response}
     
-    return {"approval_response": approval}
+    # Pause and wait for user input
+    interrupt(approval_request)
+    
+    # After resume, get the response that was set via update_state
+    return {"approval_response": state.get("approval_response", "deny")}
 
 
 def route_approval(state: AgentState) -> str:
