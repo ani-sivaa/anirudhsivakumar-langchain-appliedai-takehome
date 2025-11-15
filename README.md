@@ -25,6 +25,7 @@ python3 -m cli.main
 - **Review PRs**: Reviews multiple files in parallel
 - **Remember facts**: "remember my name is X" (SQLite)
 - **Semantic search**: "how does the graph work?" (Pinecone RAG)
+- **Thread management**: Resume conversations, switch between projects with `/list`, `/switch`, `/rename`
 
 ## Key Design Decisions
 
@@ -78,6 +79,20 @@ Parallel nodes need reducers to combine outputs:
 contents: Annotated[Dict[str, str], merge_dicts]
 edit_results: Annotated[List[str], operator.add]
 ```
+
+### 11. Thread Management
+
+User-friendly conversation threads with SQLite storage. Resume old conversations, name threads, switch between projects. Solves the UUID problem - every restart used a new random thread_id, losing access to previous checkpoints.
+
+```python
+# Before: New random UUID every time
+session_id = str(uuid.uuid4())  # Lost forever!
+
+# After: Named threads with selection menu
+thread_id, name = show_thread_menu()  # "Create a website"
+```
+
+See [THREAD_MANAGEMENT.md](THREAD_MANAGEMENT.md) for details.
 
 ## Architecture
 
