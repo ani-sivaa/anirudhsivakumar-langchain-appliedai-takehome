@@ -3,14 +3,199 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
+from rich.table import Table
+from rich.prompt import Prompt, Confirm
+from datetime import datetime
 
 from agent.graph import agent_graph
 from agent.tools.checkpoint_manager import should_resume, get_resume_info
 from agent.tools.memory import get_memory_stats
 from agent.tools.codebase_indexer import index_codebase, search_codebase
+from agent.tools.thread_manager import get_thread_manager
 
 
 console = Console()
+
+
+def show_thread_menu() -> tuple[str, str]:
+    """
+    Show thread selection menu and return (thread_id, thread_name).
+    
+    Returns:
+        tuple: (thread_id, thread_name)
+    """
+    thread_mgr = get_thread_manager()
+    recent_threads = thread_mgr.list_threads(limit=10)
+    
+    if not recent_threads:
+        # No threads exist - create first one
+        console.print("[dim yellow]No previous conversations found. Starting new conversation![/dim yellow]\n")
+        thread_id = thread_mgr.create_thread(thread_name="First Conversation")
+        return thread_id, "First Conversation"
+    
+    # Show recent threads table
+    console.print("\n[bold cyan]📚 Recent Conversations:[/bold cyan]\n")
+    
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("#", style="dim", width=3)
+    table.add_column("Name", style="cyan", width=40)
+    table.add_column("Messages", justify="right", width=8)
+    table.add_column("Last Used", style="dim", width=20)
+    
+    for idx, thread in enumerate(recent_threads, 1):
+        last_used = datetime.fromisoformat(thread['last_used'])
+        time_ago = format_time_ago(last_used)
+        
+        table.add_row(
+            str(idx),
+            thread['thread_name'],
+            str(thread['message_count']),
+            time_ago
+        )
+    
+    console.print(table)
+    console.print()
+    
+    # Prompt for selection
+    console.print("[dim]Enter a number to resume, or press Enter for new conversation[/dim]")
+    choice = Prompt.ask("[bold cyan]Choice[/bold cyan]", default="new")
+    
+    if choice.lower() in ["new", "n", ""]:
+        # Create new thread
+        thread_id = thread_mgr.create_thread()
+        return thread_id, thread_mgr.get_thread_by_id(thread_id)['thread_name']
+    
+    try:
+        idx = int(choice)
+        if 1 <= idx <= len(recent_threads):
+            selected = recent_threads[idx - 1]
+            console.print(f"[dim green]Resuming: {selected['thread_name']}[/dim green]\n")
+            return selected['thread_id'], selected['thread_name']
+    except ValueError:
+        pass
+    
+    # Invalid choice - create new
+    console.print("[dim yellow]Invalid choice. Starting new conversation.[/dim yellow]\n")
+    thread_id = thread_mgr.create_thread()
+    return thread_id, thread_mgr.get_thread_by_id(thread_id)['thread_name']
+
+
+def format_time_ago(dt: datetime) -> str:
+    """Format datetime as human-readable time ago."""
+    now = datetime.now()
+    
+    # Handle ISO string or datetime object
+    if isinstance(dt, str):
+        dt = datetime.fromisoformat(dt)
+    
+    diff = now - dt
+    
+    if diff.days > 365:
+        return f"{diff.days // 365}y ago"
+    elif diff.days > 30:
+        return f"{diff.days // 30}mo ago"
+    elif diff.days > 0:
+        return f"{diff.days}d ago"
+    elif diff.seconds > 3600:
+        return f"{diff.seconds // 3600}h ago"
+    elif diff.seconds > 60:
+        return f"{diff.seconds // 60}m ago"
+    else:
+        return "just now"
+
+
+def handle_special_command(command: str, current_thread_id: str, current_thread_name: str) -> tuple[bool, str, str]:
+    """
+    Handle special commands like /list, /rename, /switch, /new.
+    
+    Returns:
+        tuple: (handled: bool, new_thread_id: str, new_thread_name: str)
+    """
+    thread_mgr = get_thread_manager()
+    
+    if command == "/list":
+        threads = thread_mgr.list_threads(limit=20)
+        
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("Name", style="cyan", width=40)
+        table.add_column("Messages", justify="right", width=8)
+        table.add_column("Last Used", style="dim", width=20)
+        table.add_column("ID", style="dim", width=36)
+        
+        for thread in threads:
+            last_used = datetime.fromisoformat(thread['last_used'])
+            time_ago = format_time_ago(last_used)
+            
+            # Highlight current thread
+            name_style = "bold cyan" if thread['thread_id'] == current_thread_id else "cyan"
+            name = f"→ {thread['thread_name']}" if thread['thread_id'] == current_thread_id else thread['thread_name']
+            
+            table.add_row(
+                name,
+                str(thread['message_count']),
+                time_ago,
+                thread['thread_id'][:8] + "..."
+            )
+        
+        console.print(table)
+        return True, current_thread_id, current_thread_name
+    
+    elif command.startswith("/rename "):
+        new_name = command[8:].strip()
+        if new_name:
+            thread_mgr.rename_thread(current_thread_id, new_name)
+            console.print(f"[dim green]Renamed to: {new_name}[/dim green]")
+            return True, current_thread_id, new_name
+        else:
+            console.print("[dim red]Usage: /rename <new name>[/dim red]")
+            return True, current_thread_id, current_thread_name
+    
+    elif command.startswith("/switch "):
+        target = command[8:].strip()
+        
+        # Try as number first (from /list)
+        threads = thread_mgr.list_threads(limit=20)
+        try:
+            idx = int(target)
+            if 1 <= idx <= len(threads):
+                thread = threads[idx - 1]
+                console.print(f"[dim green]Switched to: {thread['thread_name']}[/dim green]")
+                return True, thread['thread_id'], thread['thread_name']
+        except ValueError:
+            # Try as name
+            thread = thread_mgr.get_thread_by_name(target)
+            if thread:
+                console.print(f"[dim green]Switched to: {thread['thread_name']}[/dim green]")
+                return True, thread['thread_id'], thread['thread_name']
+        
+        console.print("[dim red]Thread not found. Use /list to see available threads.[/dim red]")
+        return True, current_thread_id, current_thread_name
+    
+    elif command == "/new":
+        # Create new thread
+        thread_id = thread_mgr.create_thread()
+        thread_name = thread_mgr.get_thread_by_id(thread_id)['thread_name']
+        console.print(f"[dim green]Started new conversation: {thread_name}[/dim green]")
+        return True, thread_id, thread_name
+    
+    elif command == "/help":
+        console.print(Panel.fit(
+            """[bold cyan]Thread Management Commands:[/bold cyan]
+
+[bold]/list[/bold]              - List all conversations
+[bold]/rename <name>[/bold]     - Rename current conversation
+[bold]/switch <name|#>[/bold]   - Switch to another conversation
+[bold]/new[/bold]               - Start a new conversation
+[bold]/help[/bold]              - Show this help message
+[bold]exit[/bold]               - Quit the application
+
+[dim]Regular messages are sent to the agent.[/dim]""",
+            border_style="cyan",
+            title="[bold]Help[/bold]"
+        ))
+        return True, current_thread_id, current_thread_name
+    
+    return False, current_thread_id, current_thread_name
 
 
 def auto_index_codebase():
@@ -33,7 +218,7 @@ def main():
         "Watch me think in real-time as I process your requests!",
         style="bright_cyan"
     )
-    subtitle = Text("Type 'exit' to quit | Ctrl+C to interrupt (auto-resumes on next message)", style="bright_cyan")
+    subtitle = Text("Type 'exit' to quit | '/help' for commands | Ctrl+C to interrupt", style="bright_cyan")
 
     console.print(Panel.fit(
         Text.assemble(title, "\n", description, "\n", subtitle),
@@ -50,8 +235,15 @@ def main():
     # Auto-index codebase on startup
     auto_index_codebase()
 
-    session_id = str(uuid.uuid4())
-    config = {"configurable": {"thread_id": session_id}}
+    # Thread selection
+    thread_id, thread_name = show_thread_menu()
+    thread_mgr = get_thread_manager()
+    
+    config = {"configurable": {"thread_id": thread_id}}
+    
+    # Show current thread name in status
+    console.print(f"[dim cyan]Current conversation: {thread_name}[/dim cyan]")
+    console.print(f"[dim]Type /help to see thread management commands[/dim]\n")
     
     while True:
         try:
@@ -60,8 +252,18 @@ def main():
             console.print("\n[bright_magenta]Bye[/bright_magenta]")
             break
         except KeyboardInterrupt:
-            console.print("\n[bright_magenta]Bye[/bright_magenta]")
-            break
+            # Ctrl+C at input prompt - ask if they want to quit
+            console.print()
+            try:
+                confirm = console.input("[dim yellow]Quit? (y/n):[/dim yellow] ").strip().lower()
+                if confirm in ['y', 'yes']:
+                    console.print("[bright_magenta]Bye[/bright_magenta]")
+                    break
+                else:
+                    continue
+            except (KeyboardInterrupt, EOFError):
+                console.print("\n[bright_magenta]Bye[/bright_magenta]")
+                break
         
         if user_input.strip().lower() in ["exit", "quit"]:
             console.print("[bright_magenta]Bye[/bright_magenta]")
@@ -69,6 +271,18 @@ def main():
         
         if not user_input.strip():
             continue
+        
+        # Handle special commands
+        if user_input.strip().startswith("/"):
+            handled, thread_id, thread_name = handle_special_command(
+                user_input.strip(), 
+                thread_id, 
+                thread_name
+            )
+            if handled:
+                # Update config if thread changed
+                config = {"configurable": {"thread_id": thread_id}}
+                continue
         
         console.print()
         node_count = 0
@@ -103,6 +317,18 @@ def main():
             # If resuming, pass None to continue from checkpoint
             # Otherwise pass new user input
             input_data = None if is_resuming else {"user_input": user_input}
+            
+            # Update thread metadata - auto-name if first message
+            thread = thread_mgr.get_thread_by_id(thread_id)
+            if thread and thread['message_count'] == 0 and not is_resuming:
+                # First message - auto-name the thread
+                new_name = thread_mgr._generate_name_from_message(user_input)
+                thread_mgr.rename_thread(thread_id, new_name)
+                thread_name = new_name
+            
+            # Update activity
+            if not is_resuming:
+                thread_mgr.update_thread_activity(thread_id)
             
             interrupted = False
             for event in agent_graph.stream(
@@ -210,8 +436,10 @@ def main():
                 console.print()
         
         except KeyboardInterrupt:
-            console.print("\n\n[yellow]Interrupted! Checkpoint saved.[/yellow]")
-            console.print("[dim]Type anything to resume from where you left off[/dim]\n")
+            console.print("\n\n[yellow]⏸️  Interrupted! Checkpoint saved.[/yellow]")
+            console.print("[dim]Your progress is saved. Continue typing to resume, or press Ctrl+C again to quit.[/dim]")
+            # Stay in the loop - don't break!
+            # Next message will resume from checkpoint
         
         except Exception as e:
             console.print(f"[bold red]Error: {e}[/bold red]")
