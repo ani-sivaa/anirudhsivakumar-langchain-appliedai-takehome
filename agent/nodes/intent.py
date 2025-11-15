@@ -30,7 +30,6 @@ Available actions:
 - "project": Create multiple NEW files (e.g., "create 5 files", "build a website", "scaffold a project")
 - "shell": Run a shell command
 - "install": Install a Python package via pip
-- "review": Review code changes (PR review, code review, diff review)
 - "remember": Save information to long-term memory
 - "recall": Retrieve information from long-term memory
 - "project_context": Get current project structure and file list from memory
@@ -72,10 +71,6 @@ Use "install" for:
 - Installing Python packages
 - "install numpy", "pip install requests", "install scikit-learn"
 
-Use "review" for:
-- Code review requests
-- "review this PR", "review my changes", "check the diff"
-
 Use "remember" for:
 - Saving user preferences, facts, or project information
 - "remember my name is X", "save that I prefer Y", "remember this project uses Z"
@@ -106,21 +101,18 @@ Extract relevant information:
 - For "edit_multi": extract paths (array of file paths) and edit_instruction (what to change)
 - For "project": extract project_instruction (full description of what to create)
 - For "shell": extract command (the shell command to run)
-- For "review": extract base_branch and head_branch (optional, defaults to main and HEAD)
 - For "remember": extract memory_key (label) and memory_value (dict of info to save)
 - For "recall": extract memory_key (what to retrieve)
 
 Respond with valid JSON only:
 {
-    "action": "chat|edit|edit_multi|project|shell|install|review|remember|recall|project_context|index_codebase|ask_codebase",
+    "action": "chat|edit|edit_multi|project|shell|install|remember|recall|project_context|index_codebase|ask_codebase",
     "path": "file path" (for edit),
     "paths": ["file1.py", "file2.py"] (for edit_multi),
     "edit_instruction": "what to write or change" (for edit or edit_multi),
     "project_instruction": "full project description" (for project),
     "command": "shell command" (for shell),
     "package_to_install": "package name" (for install),
-    "base_branch": "branch name" (for review, optional),
-    "head_branch": "branch name" (for review, optional),
     "memory_key": "key label" (for remember/recall),
     "memory_value": {"key": "value"} (for remember)
 }
@@ -130,7 +122,6 @@ Examples:
 - "what can you do?" → {"action": "chat"}
 - "run ls -la" → {"action": "shell", "command": "ls -la"}
 - "install numpy" → {"action": "install", "package_to_install": "numpy"}
-- "review this PR" → {"action": "review"}
 - "add a fibonacci function to utils.py" → {"action": "edit", "path": "utils.py", "edit_instruction": "add a fibonacci function"}
 - "add type hints to utils.py and main.py" → {"action": "edit_multi", "paths": ["utils.py", "main.py"], "edit_instruction": "add type hints"}
 - "refactor logging in file1.py, file2.py, file3.py" → {"action": "edit_multi", "paths": ["file1.py", "file2.py", "file3.py"], "edit_instruction": "refactor logging"}
@@ -230,8 +221,6 @@ def route_action(state: AgentState) -> str:
         return "shell"
     elif action == "install":
         return "install"
-    elif action == "review":
-        return "review"
     elif action == "remember":
         return "remember"
     elif action == "recall":

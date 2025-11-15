@@ -28,7 +28,7 @@ class AgentState(TypedDict, total=False):
     
     # === ROUTING ===
     # Determines which workflow to execute
-    action: str  # "chat", "edit", "edit_multi", "shell", "review", "project", "remember", "recall"
+    action: str  # "chat", "edit", "edit_multi", "shell", "project", "remember", "recall"
     
     # === SINGLE FILE EDIT (serial: read → modify → write) ===
     path: str  # File path: "agent/state.py"
@@ -51,15 +51,6 @@ class AgentState(TypedDict, total=False):
     package_to_install: str  # Package name for pip install: "numpy"
     retry_count: int  # How many times we've retried (prevent infinite loops)
     original_command: str  # Command to re-run after installing dependency
-    
-    # === PR REVIEW (parallel: per-file reviews then aggregate) ===
-    base_branch: str  # Branch to compare against: "main"
-    head_branch: str  # Branch with changes: "feature-branch"
-    diffs: List[Dict[str, str]]  # [{file: "a.py", diff: "+new line"}] - one per changed file
-    file: str  # Current file being reviewed in parallel node
-    diff: str  # Current diff being reviewed in parallel node
-    review_comments: Annotated[List[str], add]  # Per-file comments - add reducer collects them
-    review_summary: str  # Final aggregated review
     
     # === LONG-TERM MEMORY (SQLite persistence) ===
     user_id: str  # User namespace: "default_user"
