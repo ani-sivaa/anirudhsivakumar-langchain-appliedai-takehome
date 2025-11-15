@@ -35,7 +35,14 @@ def run_shell(state: AgentState) -> Dict:
         }
         
     except subprocess.TimeoutExpired:
-        return {"error": "Command timed out after 30 seconds"}
+        return {
+            "error": f"Command timed out after 30 seconds: {command}\n"
+                     "The command might be waiting for input or taking too long to complete.",
+            "shell_output": "TIMEOUT",
+            "return_code": -1,
+            "response": f"Command '{command}' timed out after 30 seconds",
+            "messages": [{"role": "assistant", "content": f"Command '{command}' timed out"}]
+        }
     except Exception as e:
         return {"error": f"Error running command: {str(e)}"}
 
