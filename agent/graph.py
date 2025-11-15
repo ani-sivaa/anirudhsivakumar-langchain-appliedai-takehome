@@ -10,9 +10,6 @@ from agent.nodes.file_io import read_file, write_file, read_file_multi, write_fi
 from agent.nodes.modify import modify_code, modify_code_multi
 from agent.nodes.shell import run_shell
 from agent.nodes.install import install_dependency, should_retry_with_install, prepare_retry
-from agent.nodes.git import get_git_diff
-from agent.nodes.review import review_file
-from agent.nodes.summarize import summarize_review
 from agent.nodes.summarize_edit import summarize_multi_edit
 from agent.nodes.edit_multi_passthrough import edit_multi_passthrough
 from agent.nodes.edit_multi_stages import edit_multi_modify_passthrough, edit_multi_write_passthrough
@@ -22,12 +19,6 @@ from agent.nodes.approval import check_approval_needed, request_approval, route_
 from agent.nodes.auto_memory_update import auto_update_project_memory, recall_project_context
 from agent.nodes.codebase_chat import chat_about_codebase, index_codebase_node
 from agent.tools.memory import get_memory_store
-
-
-def fan_out_reviews(state: AgentState):
-    """Creates parallel review_file instances - one per changed file."""
-    diffs = state.get("diffs", [])
-    return [Send("review_file", {"file": d["file"], "diff": d["diff"]}) for d in diffs]
 
 
 def fan_out_project_files(state: AgentState):
@@ -102,9 +93,6 @@ def create_graph():
     graph.add_node("shell", run_shell)
     graph.add_node("install", install_dependency)
     graph.add_node("prepare_retry", prepare_retry)
-    graph.add_node("get_git_diff", get_git_diff)
-    graph.add_node("review_file", review_file)
-    graph.add_node("summarize_review", summarize_review)
     graph.add_node("save_memory", save_user_memory)
     graph.add_node("recall_memory", recall_user_memory)
     graph.add_node("plan_project", plan_project)
@@ -127,7 +115,6 @@ def create_graph():
             "edit_multi": "edit_multi",
             "shell": "shell",
             "install": "install",
-            "review": "get_git_diff",
             "remember": "save_memory",
             "recall": "recall_memory",
             "project": "plan_project",
@@ -147,7 +134,6 @@ def create_graph():
             "edit_multi": "edit_multi",
             "shell": "shell",
             "install": "install",
-            "review": "get_git_diff",
             "remember": "save_memory",
             "recall": "recall_memory",
             "project": "plan_project",
@@ -180,10 +166,6 @@ def create_graph():
     graph.add_edge("write_file_multi", "summarize_multi_edit")
     graph.add_edge("summarize_multi_edit", "auto_memory")
     graph.add_edge("auto_memory", END)
-    
-    graph.add_conditional_edges("get_git_diff", fan_out_reviews, ["review_file"])
-    graph.add_edge("review_file", "summarize_review")
-    graph.add_edge("summarize_review", END)
     
     graph.add_conditional_edges("plan_project", fan_out_project_files, ["create_file"])
     graph.add_edge("create_file", "summarize_project")

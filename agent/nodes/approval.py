@@ -90,8 +90,6 @@ def route_approval(state: AgentState) -> str:
             return "edit_multi"
         elif action == "install":
             return "install"
-        elif action == "review":
-            return "review"
         elif action == "remember":
             return "remember"
         elif action == "recall":
@@ -125,8 +123,6 @@ def route_after_approval(state: AgentState) -> str:
             return "edit_multi"
         elif action == "install":
             return "install"
-        elif action == "review":
-            return "review"
         elif action == "remember":
             return "remember"
         elif action == "recall":
