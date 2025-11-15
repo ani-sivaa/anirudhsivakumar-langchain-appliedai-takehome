@@ -316,7 +316,12 @@ def main():
         try:
             # If resuming, pass None to continue from checkpoint
             # Otherwise pass new user input
-            input_data = None if is_resuming else {"user_input": user_input}
+            if is_resuming:
+                input_data = None
+            else:
+                # Just pass user input - LangGraph will merge with checkpoint state
+                # The nodes themselves will add to messages via the 'add' reducer
+                input_data = {"user_input": user_input}
             
             # Update thread metadata - auto-name if first message
             thread = thread_mgr.get_thread_by_id(thread_id)

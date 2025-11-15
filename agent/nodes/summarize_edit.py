@@ -10,12 +10,16 @@ def summarize_multi_edit(state: AgentState) -> Dict:
     """
     edit_results = state.get("edit_results", [])
     paths = state.get("paths", [])
+    user_input = state.get("user_input", "")
     
     if not edit_results:
         return {
             "response": "Multi-file edit completed, but no results were recorded.",
             "error": "",
-            "messages": [{"role": "assistant", "content": "Multi-file edit completed"}]
+            "messages": [
+                {"role": "user", "content": user_input},
+                {"role": "assistant", "content": "Multi-file edit completed"}
+            ]
         }
     
     success_count = sum(1 for r in edit_results if r.startswith("SUCCESS:"))
@@ -39,6 +43,9 @@ def summarize_multi_edit(state: AgentState) -> Dict:
     return {
         "response": summary,
         "error": error_msg,
-        "messages": [{"role": "assistant", "content": summary}]
+        "messages": [
+            {"role": "user", "content": user_input},
+            {"role": "assistant", "content": summary}
+        ]
     }
 

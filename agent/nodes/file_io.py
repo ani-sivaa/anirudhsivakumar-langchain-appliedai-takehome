@@ -98,10 +98,16 @@ def write_file(state: AgentState) -> Dict:
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
         
+        user_input = state.get("user_input", "")
+        response_msg = f"Successfully wrote to {path}"
+        
         return {
             "error": "",
-            "response": f"Successfully wrote to {path}",
-            "messages": [{"role": "assistant", "content": f"Successfully wrote to {path}"}]
+            "response": response_msg,
+            "messages": [
+                {"role": "user", "content": user_input},
+                {"role": "assistant", "content": response_msg}
+            ]
         }
         
     except Exception as e:
