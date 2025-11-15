@@ -22,7 +22,6 @@ python3 -m cli.main
 - **Edit files**: "add type hints to utils.py"
 - **Multi-file edits**: Edits multiple files in parallel
 - **Run commands**: "run pytest" with auto-install on missing packages
-- **Review PRs**: Reviews multiple files in parallel
 - **Remember facts**: "remember my name is X" (SQLite)
 - **Semantic search**: "how does the graph work?" (Pinecone RAG)
 - **Thread management**: Resume conversations, switch between projects with `/list`, `/switch`, `/rename`
@@ -101,7 +100,6 @@ User Input → determine_intent → check_approval → Route:
   ├─ edit → read → modify → write
   ├─ edit_multi → [read × N] → modify → [write × N] → summarize
   ├─ shell → run → detect_error → (install if needed) → retry
-  ├─ review → get_diff → [review × N] → summarize
   ├─ project → plan → [create × N] → summarize
   ├─ remember/recall → SQLite
   ├─ index_codebase/ask_codebase → Pinecone RAG
@@ -135,19 +133,7 @@ pytest evals/ -v
 pytest evals/test_architecture_core.py -v
 ```
 
-## Technical Choices
 
-- **Model**: GPT-4o-mini (fast, cheap)
-- **Temperature**: 0.0 for classification, 0.3 for generation
-- **Embeddings**: text-embedding-ada-002
-- **Vector Store**: Pinecone
-- **Checkpointing**: MemorySaver
-
-## Why This Works
-
-Every decision point is **explicit**. You can visualize the graph, debug by inspecting state, and add features without breaking existing ones.
-
-Parallel execution and human-in-the-loop are explicit patterns, not hidden abstractions.
 
 ---
 
