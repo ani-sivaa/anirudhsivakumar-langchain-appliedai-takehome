@@ -8,7 +8,6 @@ from rich.prompt import Prompt, Confirm
 from datetime import datetime
 
 from agent.graph import agent_graph
-from agent.tools.checkpoint_manager import should_resume, get_resume_info
 from agent.tools.memory import get_memory_stats
 from agent.tools.codebase_indexer import index_codebase, search_codebase
 from agent.tools.thread_manager import get_thread_manager
@@ -305,13 +304,11 @@ def main():
                 else:
                     # Real pending approval - resume
                     is_resuming = True
-                    resume_info = get_resume_info(state)
-                    console.print(f"[dim yellow]{resume_info}[/dim yellow]")
+                    console.print(f"[dim yellow]Resuming from pending approval...[/dim yellow]")
             else:
                 # Other pending nodes - resume normally
                 is_resuming = True
-                resume_info = get_resume_info(state)
-                console.print(f"[dim yellow]{resume_info}[/dim yellow]")
+                console.print(f"[dim yellow]Resuming from checkpoint...[/dim yellow]")
         
         try:
             # If resuming, pass None to continue from checkpoint
@@ -384,7 +381,7 @@ def main():
                                     console.print("[dim red]Please answer 'yes' or 'no'[/dim red]")
                             
                             # Update state with user's decision
-                            agent_graph.update_state(config, {"approval_response": approval_response})
+                            agent_graph.rune(config, {"approval_response": approval_response})
                             
                             # Show status
                             console.print()
