@@ -6,13 +6,26 @@ A conversational coding agent built with LangGraph. Edits files, runs commands, 
 
 ## Quick Start
 
+**One-Command Setup** (Recommended):
+```bash
+./start.sh
+```
+
+The script will:
+- ✅ Create virtual environment
+- ✅ Install dependencies
+- ✅ Set up `.env` file with prompts
+- ✅ Validate API keys
+- ✅ Launch the agent
+
+**Manual Setup** (Alternative):
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-cp .env.example .env
-# Add OPENAI_API_KEY and PINECONE_API_KEY to .env
+# Create .env and add your OPENAI_API_KEY
+echo "OPENAI_API_KEY=your_key_here" > .env
 
 python3 -m cli.main
 ```
