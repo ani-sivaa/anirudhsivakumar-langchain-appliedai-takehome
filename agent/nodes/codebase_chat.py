@@ -43,8 +43,11 @@ def index_codebase_node(state: AgentState) -> Dict:
             response = f"Error indexing codebase: {result['error']}"
         else:
             total_files = result.get("total_files", 0)
-            response = f"Indexed {total_files} files for semantic search.\n\n"
+            total_chunks = result.get("total_chunks", 0)
+            response = f"Indexed {total_chunks} code chunks from {total_files} files.\n\n"
+            response += "Python files are chunked at function/class level for precise semantic search.\n\n"
             response += "You can now ask questions like:\n"
+            response += "- 'which node writes to the response state?'\n"
             response += "- 'how does the graph work?'\n"
             response += "- 'where is error handling?'\n"
             response += "- 'explain the memory system'"
@@ -101,11 +104,11 @@ def chat_about_codebase(state: AgentState) -> Dict:
         }
 
     try:
-        # Semantic search for relevant files
-        results = search_codebase(query=user_input, k=5)
+        # Semantic search for relevant code chunks (increased k for better coverage)
+        results = search_codebase(query=user_input, k=10)
 
         if not results:
-            response = "No relevant files found.\n\n"
+            response = "No relevant code found.\n\n"
             response += "Make sure you've indexed the codebase first:\n"
             response += "Say 'index the codebase' to get started."
 
@@ -115,17 +118,39 @@ def chat_about_codebase(state: AgentState) -> Dict:
             }
 
         # Build context from retrieved documents
-        context_parts = ["Here are the relevant files:\n"]
+        context_parts = ["Here are the relevant code chunks:\n"]
 
         for i, doc in enumerate(results, 1):
             path = doc.metadata.get('path', 'unknown')
+            chunk_type = doc.metadata.get('chunk_type', 'unknown')
+            name = doc.metadata.get('name', '')
             content = doc.page_content
 
-            context_parts.append(f"\n--- File {i}: {path} ---")
+            # Build rich header based on chunk type
+            if chunk_type == 'function':
+                args = doc.metadata.get('args', [])
+                calls = doc.metadata.get('calls', [])
+                header = f"\n--- Chunk {i}: Function `{name}({', '.join(args)})` in {path} ---"
+                if calls:
+                    header += f"\n    Calls: {', '.join(calls[:5])}"
+            elif chunk_type == 'class':
+                methods = doc.metadata.get('methods', [])
+                header = f"\n--- Chunk {i}: Class `{name}` in {path} ---"
+                if methods:
+                    header += f"\n    Methods: {', '.join(methods[:10])}"
+            elif chunk_type == 'module':
+                imports = doc.metadata.get('imports', [])
+                header = f"\n--- Chunk {i}: Module-level code in {path} ---"
+                if imports:
+                    header += f"\n    Imports: {', '.join(imports[:5])}"
+            else:
+                header = f"\n--- Chunk {i}: {path} ---"
+            
+            context_parts.append(header)
 
-            # Truncate if too long
-            if len(content) > 1500:
-                content = content[:1500] + "\n... (truncated)"
+            # Increase truncation limit significantly (most functions fit in 4000 chars)
+            if len(content) > 4000:
+                content = content[:4000] + "\n... (truncated)"
 
             context_parts.append(content)
 
@@ -136,15 +161,23 @@ def chat_about_codebase(state: AgentState) -> Dict:
 
         system_prompt = """You are a helpful coding assistant that explains codebases.
 
-You have been provided with relevant files from a codebase. Your job is to answer
-the user's question based on the code you see.
+You have been provided with relevant code chunks (functions, classes, modules) from a codebase.
+Each chunk shows a specific function or class, making it easy to find exact implementations.
 
-Be specific and reference file names and code snippets when explaining.
-If the code doesn't fully answer the question, say so and explain what you can.
+Your job is to answer the user's question based on the code you see.
+
+Be specific and reference:
+- Function/class names
+- File paths
+- Line numbers if available
+- Actual code snippets when explaining
+
+If you see the exact answer in a function, point to it directly.
+If the code doesn't fully answer the question, say so and explain what you can see.
 
 Keep your explanation clear and concise."""
 
-        user_prompt = f"""Based on these files from the codebase:
+        user_prompt = f"""Based on these code chunks from the codebase:
 
 {context}
 
