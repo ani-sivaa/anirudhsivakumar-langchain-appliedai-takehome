@@ -115,6 +115,14 @@ Generate the complete file content:"""
         return {"error": f"Error creating {file_path}: {str(e)}"}
 
 
+def collect_project_files(state: AgentState) -> Dict:
+    """
+    Passthrough node that collects all parallel create_file operations.
+    Waits for all file creation nodes to complete before proceeding to summarize.
+    """
+    return {}
+
+
 def summarize_project(state: AgentState) -> Dict:
     """
     Summarize project creation results.

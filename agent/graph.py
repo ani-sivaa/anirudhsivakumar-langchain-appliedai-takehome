@@ -14,7 +14,7 @@ from agent.nodes.summarize_edit import summarize_multi_edit
 from agent.nodes.edit_multi_passthrough import edit_multi_passthrough
 from agent.nodes.edit_multi_stages import edit_multi_modify_passthrough, edit_multi_write_passthrough
 from agent.nodes.memory_ops import save_user_memory, recall_user_memory
-from agent.nodes.project import plan_project, create_project_file, summarize_project
+from agent.nodes.project import plan_project, create_project_file, collect_project_files, summarize_project
 from agent.nodes.approval import check_approval_needed, request_approval, route_approval, route_after_approval, handle_denial
 from agent.nodes.auto_memory_update import auto_update_project_memory, recall_project_context
 from agent.nodes.codebase_chat import chat_about_codebase, index_codebase_node
@@ -97,6 +97,7 @@ def create_graph():
     graph.add_node("recall_memory", recall_user_memory)
     graph.add_node("plan_project", plan_project)
     graph.add_node("create_file", create_project_file)
+    graph.add_node("collect_project_files", collect_project_files)
     graph.add_node("summarize_project", summarize_project)
     graph.add_node("auto_memory", auto_update_project_memory)
     graph.add_node("project_context", recall_project_context)
@@ -168,7 +169,8 @@ def create_graph():
     graph.add_edge("auto_memory", END)
     
     graph.add_conditional_edges("plan_project", fan_out_project_files, ["create_file"])
-    graph.add_edge("create_file", "summarize_project")
+    graph.add_edge("create_file", "collect_project_files")  # Collect all creates first
+    graph.add_edge("collect_project_files", "summarize_project")  # Then summarize once
     graph.add_edge("summarize_project", "auto_memory")
     graph.add_edge("auto_memory", END)
     
