@@ -6,7 +6,7 @@ from agent.tools.llm import get_llm
 from agent.tools.parsing import safe_json_parse
 
 
-def determine_intent(state: AgentState) -> Dict:
+async def determine_intent(state: AgentState) -> Dict:
     """
     Figures out what the user wants using an LLM.
     Takes the user's message + recent conversation and classifies it into an action.
@@ -168,7 +168,7 @@ Current user request: {user_input}
 
 Classify the intent and extract parameters as JSON:"""
 
-        response = llm.invoke(prompt=user_prompt, system_prompt=system_prompt)
+        response = await llm.ainvoke(prompt=user_prompt, system_prompt=system_prompt)
         intent_data = safe_json_parse(response, default={"action": "chat"})
         
         result = {"action": intent_data.get("action", "chat")}

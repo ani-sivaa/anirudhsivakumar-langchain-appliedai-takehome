@@ -26,7 +26,7 @@ def save_user_memory(state: AgentState) -> Dict:
     }
 
 
-def recall_user_memory(state: AgentState) -> Dict:
+async def recall_user_memory(state: AgentState) -> Dict:
     """
     Retrieves stuff from long-term memory and formats it naturally with LLM.
     Like when user asks "what's my name?" and we saved it earlier.
@@ -62,7 +62,7 @@ Retrieved memory: {memory}
 
 Generate a natural response:"""
 
-        content = llm.invoke(prompt=user_prompt, system_prompt=system_prompt)
+        content = await llm.ainvoke(prompt=user_prompt, system_prompt=system_prompt)
 
         return {
             "response": content,

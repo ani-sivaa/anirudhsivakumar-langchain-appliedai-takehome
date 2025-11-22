@@ -6,25 +6,27 @@ Run this to verify everything works end-to-end.
 
 import os
 import sys
+import asyncio
 from pathlib import Path
 
 # Add parent directory to path so we can import agent
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from agent.graph import agent_graph
+from agent.graph import get_agent_graph
 from rich.console import Console
 from rich.panel import Panel
 
 console = Console()
 
 
-def run_scenario(name, user_input, config, expected_action=None):
+async def run_scenario(name, user_input, config, expected_action=None):
     """Run a single scenario and report results."""
+    agent_graph = await get_agent_graph()
     console.print(f"\n[bold cyan]Scenario: {name}[/bold cyan]")
     console.print(f"[dim]Input: {user_input}[/dim]")
     
     try:
-        result = agent_graph.invoke({"user_input": user_input}, config)
+        result = await agent_graph.ainvoke({"user_input": user_input}, config)
         
         action = result.get("action", "unknown")
         response = result.get("response", "")
@@ -48,7 +50,7 @@ def run_scenario(name, user_input, config, expected_action=None):
         return False
 
 
-def main():
+async def async_main():
     """Run all dry run scenarios."""
     console.print(Panel.fit(
         "[bold magenta]Agent Dry Run - Testing All Features[/bold magenta]\n"
@@ -63,14 +65,14 @@ def main():
     results = []
     
     # 1. Chat functionality
-    results.append(run_scenario(
+    results.append(await run_scenario(
         "Chat - Simple greeting",
         "Hello, who are you?",
         {"configurable": {"thread_id": "dry_chat_1"}},
         expected_action="chat"
     ))
     
-    results.append(run_scenario(
+    results.append(await run_scenario(
         "Chat - Question about capabilities",
         "What can you do?",
         {"configurable": {"thread_id": "dry_chat_2"}},
@@ -78,14 +80,14 @@ def main():
     ))
     
     # 2. Memory operations
-    results.append(run_scenario(
+    results.append(await run_scenario(
         "Memory - Save information",
         "Remember that my favorite language is Python",
         {"configurable": {"thread_id": "dry_memory_1"}},
         expected_action="remember"
     ))
     
-    results.append(run_scenario(
+    results.append(await run_scenario(
         "Memory - Recall information",
         "What's my favorite language?",
         {"configurable": {"thread_id": "dry_memory_2"}},
@@ -93,7 +95,7 @@ def main():
     ))
     
     # 3. Shell execution (safe command)
-    results.append(run_scenario(
+    results.append(await run_scenario(
         "Shell - Safe command",
         "Run ls -la",
         {"configurable": {"thread_id": "dry_shell_1"}},
@@ -103,7 +105,7 @@ def main():
     # 4. Single file creation
     test_file = test_dir / "test_single.py"
     
-    results.append(run_scenario(
+    results.append(await run_scenario(
         "Edit - Create single file with function",
         f"Create {test_file} with a fibonacci function",
         {"configurable": {"thread_id": "dry_edit_1"}},
@@ -124,7 +126,7 @@ def main():
     file1.write_text("def func1():\n    pass")
     file2.write_text("def func2():\n    pass")
     
-    results.append(run_scenario(
+    results.append(await run_scenario(
         "Edit Multi - Add type hints to multiple files",
         f"Add type hints to {file1} and {file2}",
         {"configurable": {"thread_id": "dry_multi_1"}},
@@ -140,7 +142,7 @@ def main():
             console.print("[yellow]⚠ Type hints may be missing[/yellow]")
     
     # 6. Project creation
-    results.append(run_scenario(
+    results.append(await run_scenario(
         "Project - Create multiple files",
         f"Create a simple web page with index.html and style.css in {test_dir}",
         {"configurable": {"thread_id": "dry_project_1"}},
@@ -163,7 +165,7 @@ def other_function():
 """
     test_file.write_text(original)
     
-    results.append(run_scenario(
+    results.append(await run_scenario(
         "Edit - Modify preserves other code",
         f"Add error handling to calculate function in {test_file}",
         {"configurable": {"thread_id": "dry_modify_1"}},
@@ -197,6 +199,11 @@ def other_function():
     console.print("="*80)
     
     return passed == total
+
+
+def main():
+    """Sync wrapper for async main."""
+    return asyncio.run(async_main())
 
 
 if __name__ == "__main__":

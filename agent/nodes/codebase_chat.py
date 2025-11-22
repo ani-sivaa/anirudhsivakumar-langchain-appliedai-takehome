@@ -75,7 +75,7 @@ def index_codebase_node(state: AgentState) -> Dict:
         }
 
 
-def chat_about_codebase(state: AgentState) -> Dict:
+async def chat_about_codebase(state: AgentState) -> Dict:
     """
     Answer questions about the codebase using RAG.
 
@@ -186,7 +186,7 @@ Keep your explanation clear and concise."""
 Please answer this question:
 {user_input}"""
 
-        response = llm.invoke(prompt=user_prompt, system_prompt=system_prompt)
+        response = await llm.ainvoke(prompt=user_prompt, system_prompt=system_prompt)
 
         return {
             "response": response,

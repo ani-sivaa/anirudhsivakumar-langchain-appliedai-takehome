@@ -8,7 +8,7 @@ from pathlib import Path
 import ast
 import pytest
 
-from agent.graph import agent_graph
+from agent.graph import get_agent_graph
 
 
 TEST_DIR = Path("test_generated")
@@ -25,12 +25,19 @@ def setup_teardown():
         shutil.rmtree(TEST_DIR)
 
 
-def test_generates_valid_python_syntax():
+@pytest.fixture
+async def agent_graph():
+    """Get the agent graph for tests."""
+    return await get_agent_graph()
+
+
+@pytest.mark.asyncio
+async def test_generates_valid_python_syntax(agent_graph):
     """Agent should generate syntactically valid Python code."""
     test_file = TEST_DIR / "test_syntax.py"
     
     config = {"configurable": {"thread_id": "test_syntax"}}
-    result = agent_graph.invoke({
+    result = await agent_graph.ainvoke({
         "user_input": f"Create {test_file} with a function that adds two numbers"
     }, config)
     
@@ -47,12 +54,13 @@ def test_generates_valid_python_syntax():
     assert "def " in code
 
 
-def test_follows_specific_instructions():
+@pytest.mark.asyncio
+async def test_follows_specific_instructions(agent_graph):
     """Agent should follow detailed instructions precisely."""
     test_file = TEST_DIR / "calculator.py"
     
     config = {"configurable": {"thread_id": "test_instructions"}}
-    result = agent_graph.invoke({
+    result = await agent_graph.ainvoke({
         "user_input": f"Create {test_file} with a Calculator class that has add, subtract, multiply, and divide methods"
     }, config)
     
@@ -69,12 +77,13 @@ def test_follows_specific_instructions():
     assert "def divide" in code
 
 
-def test_handles_edge_cases_in_generation():
+@pytest.mark.asyncio
+async def test_handles_edge_cases_in_generation(agent_graph):
     """Agent should handle edge cases like division by zero."""
     test_file = TEST_DIR / "safe_divide.py"
     
     config = {"configurable": {"thread_id": "test_edge_cases"}}
-    result = agent_graph.invoke({
+    result = await agent_graph.ainvoke({
         "user_input": f"Create {test_file} with a safe_divide function that handles division by zero"
     }, config)
     
@@ -87,12 +96,13 @@ def test_handles_edge_cases_in_generation():
     assert "0" in code or "zero" in code.lower()
 
 
-def test_generates_correct_imports():
+@pytest.mark.asyncio
+async def test_generates_correct_imports(agent_graph):
     """Agent should include necessary imports."""
     test_file = TEST_DIR / "file_reader.py"
     
     config = {"configurable": {"thread_id": "test_imports"}}
-    result = agent_graph.invoke({
+    result = await agent_graph.ainvoke({
         "user_input": f"Create {test_file} with a function that reads a JSON file and returns a dict"
     }, config)
     
@@ -105,7 +115,8 @@ def test_generates_correct_imports():
     assert "def " in code
 
 
-def test_multi_file_consistency():
+@pytest.mark.asyncio
+async def test_multi_file_consistency(agent_graph):
     """When editing multiple files, changes should be consistent."""
     # Create test files
     file1 = TEST_DIR / "module1.py"
@@ -114,7 +125,7 @@ def test_multi_file_consistency():
     file2.write_text("def old_function():\n    pass")
     
     config = {"configurable": {"thread_id": "test_consistency"}}
-    result = agent_graph.invoke({
+    result = await agent_graph.ainvoke({
         "user_input": f"Add type hints to {file1} and {file2}"
     }, config)
     
@@ -126,7 +137,8 @@ def test_multi_file_consistency():
     assert "->" in code2
 
 
-def test_preserves_existing_code():
+@pytest.mark.asyncio
+async def test_preserves_existing_code(agent_graph):
     """When modifying a file, agent should preserve unrelated code."""
     test_file = TEST_DIR / "existing.py"
     original = """def important_function():
@@ -138,7 +150,7 @@ def another_function():
     test_file.write_text(original)
     
     config = {"configurable": {"thread_id": "test_preserve"}}
-    result = agent_graph.invoke({
+    result = await agent_graph.ainvoke({
         "user_input": f"Add a docstring to important_function in {test_file}"
     }, config)
     
@@ -151,12 +163,13 @@ def another_function():
     assert '"""' in modified or "'''" in modified
 
 
-def test_code_quality_standards():
+@pytest.mark.asyncio
+async def test_code_quality_standards(agent_graph):
     """Generated code should follow basic quality standards."""
     test_file = TEST_DIR / "quality_test.py"
     
     config = {"configurable": {"thread_id": "test_quality"}}
-    result = agent_graph.invoke({
+    result = await agent_graph.ainvoke({
         "user_input": f"Create {test_file} with a function to validate email addresses"
     }, config)
     
@@ -171,12 +184,13 @@ def test_code_quality_standards():
     ast.parse(code)
 
 
-def test_handles_complex_requirements():
+@pytest.mark.asyncio
+async def test_handles_complex_requirements(agent_graph):
     """Agent should handle multi-step requirements."""
     test_file = TEST_DIR / "complex.py"
     
     config = {"configurable": {"thread_id": "test_complex"}}
-    result = agent_graph.invoke({
+    result = await agent_graph.ainvoke({
         "user_input": f"Create {test_file} with: 1) A User class with name and email attributes, 2) A validate method that checks if email contains @, 3) A __str__ method"
     }, config)
     
@@ -191,10 +205,11 @@ def test_handles_complex_requirements():
     assert "@" in code  # Email validation logic
 
 
-def test_parallel_generation_quality():
+@pytest.mark.asyncio
+async def test_parallel_generation_quality(agent_graph):
     """Parallel file creation should maintain quality across all files."""
     config = {"configurable": {"thread_id": "test_parallel_quality"}}
-    result = agent_graph.invoke({
+    result = await agent_graph.ainvoke({
         "user_input": f"Create 3 files in {TEST_DIR}: math_utils.py with add function, string_utils.py with capitalize function, list_utils.py with sort function"
     }, config)
     
@@ -211,12 +226,13 @@ def test_parallel_generation_quality():
         assert "def " in code  # Should have a function
 
 
-def test_error_handling_in_generated_code():
+@pytest.mark.asyncio
+async def test_error_handling_in_generated_code(agent_graph):
     """Generated code should include appropriate error handling."""
     test_file = TEST_DIR / "file_operations.py"
     
     config = {"configurable": {"thread_id": "test_error_handling"}}
-    result = agent_graph.invoke({
+    result = await agent_graph.ainvoke({
         "user_input": f"Create {test_file} with a function that reads a file and handles FileNotFoundError"
     }, config)
     
@@ -229,7 +245,8 @@ def test_error_handling_in_generated_code():
     assert "open" in code or "read" in code
 
 
-def test_modification_preserves_functionality():
+@pytest.mark.asyncio
+async def test_modification_preserves_functionality(agent_graph):
     """Modifications should not break existing functionality."""
     test_file = TEST_DIR / "working_code.py"
     original = """def process_data(items):
@@ -241,7 +258,7 @@ def test_modification_preserves_functionality():
     test_file.write_text(original)
     
     config = {"configurable": {"thread_id": "test_functionality"}}
-    result = agent_graph.invoke({
+    result = await agent_graph.ainvoke({
         "user_input": f"Add type hints to {test_file}"
     }, config)
     
@@ -255,12 +272,13 @@ def test_modification_preserves_functionality():
     assert "->" in modified or "List" in modified or "list" in modified
 
 
-def test_respects_code_style():
+@pytest.mark.asyncio
+async def test_respects_code_style(agent_graph):
     """Generated code should follow Python conventions."""
     test_file = TEST_DIR / "styled_code.py"
     
     config = {"configurable": {"thread_id": "test_style"}}
-    result = agent_graph.invoke({
+    result = await agent_graph.ainvoke({
         "user_input": f"Create {test_file} with a class following Python naming conventions"
     }, config)
     

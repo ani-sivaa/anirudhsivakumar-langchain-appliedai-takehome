@@ -1,4 +1,5 @@
 import uuid
+import asyncio
 import typer
 from rich.console import Console
 from rich.panel import Panel
@@ -7,7 +8,7 @@ from rich.table import Table
 from rich.prompt import Prompt, Confirm
 from datetime import datetime
 
-from agent.graph import agent_graph
+from agent.graph import get_agent_graph
 from agent.tools.memory import get_memory_stats
 from agent.tools.codebase_indexer import index_codebase, search_codebase
 from agent.tools.thread_manager import get_thread_manager
@@ -33,7 +34,7 @@ def show_thread_menu() -> tuple[str, str]:
         return thread_id, "First Conversation"
     
     # Show recent threads table
-    console.print("\n[bold cyan]📚 Recent Conversations:[/bold cyan]\n")
+    console.print("\n[bold cyan] Recent Conversations:[/bold cyan]\n")
     
     table = Table(show_header=True, header_style="bold magenta")
     table.add_column("#", style="dim", width=3)
@@ -208,7 +209,10 @@ def auto_index_codebase():
         console.print(f"[dim green]Indexed {result.get('total_files', 0)} files successfully[/dim green]")
 
 
-def main():
+async def async_main():
+    # Initialize graph asynchronously
+    agent_graph = await get_agent_graph()
+    
     title = Text("Anicode(A coding Agent that uses the LangGraph framework)", style="bold magenta blink")
 
     description = Text(
@@ -238,7 +242,7 @@ def main():
     thread_id, thread_name = show_thread_menu()
     thread_mgr = get_thread_manager()
     
-    config = {"configurable": {"thread_id": thread_id}}
+    config = {"configurable": {"thread_id": thread_id, "max_concurrency": 50}}
     
     # Show current thread name in status
     console.print(f"[dim cyan]Current conversation: {thread_name}[/dim cyan]")
@@ -280,14 +284,14 @@ def main():
             )
             if handled:
                 # Update config if thread changed
-                config = {"configurable": {"thread_id": thread_id}}
+                config = {"configurable": {"thread_id": thread_id, "max_concurrency": 50}}
                 continue
         
         console.print()
         node_count = 0
         
         # Check if we should resume from interrupted checkpoint
-        state = agent_graph.get_state(config)
+        state = await agent_graph.aget_state(config)
         
         # Only resume if there are actual pending nodes AND it's not already been processed
         # If state.next is empty or None, the graph has finished and we should start fresh
@@ -334,7 +338,7 @@ def main():
             
             interrupted = False
             node_start_times = {}  # Track when nodes start
-            for event in agent_graph.stream(
+            async for event in agent_graph.astream(
                 input_data,
                 config=config,
                 stream_mode="updates"
@@ -348,7 +352,7 @@ def main():
                         console.print()
                         
                         # Get the current state to access approval_request
-                        state = agent_graph.get_state(config)
+                        state = await agent_graph.aget_state(config)
                         approval_request = state.values.get("approval_request", {})
                         
                         if approval_request:
@@ -382,7 +386,7 @@ def main():
                                     console.print("[dim red]Please answer 'yes' or 'no'[/dim red]")
                             
                             # Update state with user's decision
-                            agent_graph.update_state(config, {"approval_response": approval_response})
+                            await agent_graph.aupdate_state(config, {"approval_response": approval_response})
                             
                             # Show status
                             console.print()
@@ -392,7 +396,7 @@ def main():
                                 console.print("[dim red]Denied - cancelling operation...[/dim red]\n")
                             
                             # Resume execution and make sure we fully drain the stream
-                            for resume_event in agent_graph.stream(None, config=config, stream_mode="updates"):
+                            async for resume_event in agent_graph.astream(None, config=config, stream_mode="updates"):
                                 for resume_node_name, resume_node_data in resume_event.items():
                                     # Skip any __interrupt__ events in resume - they're already handled
                                     if resume_node_name == "__interrupt__":
@@ -472,6 +476,11 @@ def main():
         
         except Exception as e:
             console.print(f"[bold red]Error: {e}[/bold red]")
+
+
+def main():
+    """Sync wrapper for async main function."""
+    asyncio.run(async_main())
 
 
 if __name__ == "__main__":

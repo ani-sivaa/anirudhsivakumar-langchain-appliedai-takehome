@@ -1,7 +1,8 @@
-import sqlite3
+import asyncio
+import aiosqlite
 from langgraph.graph import StateGraph, END, START
 from langgraph.types import Send
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from agent.state import AgentState
 from agent.nodes.intent import determine_intent
@@ -68,7 +69,7 @@ def fan_out_write_multi(state: AgentState):
     ]
 
 
-def create_graph():
+async def create_graph():
     """
     Builds the main LangGraph StateGraph with all nodes and edges.
     This is where the magic happens - defines all the workflows and how they connect.
@@ -185,10 +186,20 @@ def create_graph():
     graph.add_edge("prepare_retry", "install")
     graph.add_edge("install", "shell")  # Retry the command after install
     
-    conn = sqlite3.connect("./data/checkpoints.db", check_same_thread=False)
-    checkpointer = SqliteSaver(conn)
+    # AsyncSqliteSaver initialization
+    # Create connection using aiosqlite and initialize checkpointer
+    conn = await aiosqlite.connect("./data/checkpoints.db")
+    checkpointer = AsyncSqliteSaver(conn)
     store = get_memory_store()
     return graph.compile(checkpointer=checkpointer, store=store)
 
 
-agent_graph = create_graph()
+# Graph will be created lazily on first use
+_agent_graph = None
+
+async def get_agent_graph():
+    """Get or create the agent graph (async)."""
+    global _agent_graph
+    if _agent_graph is None:
+        _agent_graph = await create_graph()
+    return _agent_graph

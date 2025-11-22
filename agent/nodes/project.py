@@ -1,6 +1,5 @@
 import os
 import json
-import asyncio
 from typing import Dict
 from datetime import datetime
 
@@ -10,7 +9,7 @@ from agent.tools.parsing import safe_json_parse
 from agent.tools.validation import validate_python_syntax, should_validate_syntax
 
 
-def plan_project(state: AgentState) -> Dict:
+async def plan_project(state: AgentState) -> Dict:
     """
     Plan out multiple files for a project using LLM.
     Returns a list of file specs to be created in parallel.
@@ -42,7 +41,7 @@ Guidelines:
 
 Return JSON with all files needed:"""
         
-        response = llm.invoke(prompt=user_prompt, system_prompt=system_prompt)
+        response = await llm.ainvoke(prompt=user_prompt, system_prompt=system_prompt)
         plan_data = safe_json_parse(response, default={"files": []})
         files = plan_data.get("files", [])
         
@@ -58,11 +57,11 @@ Return JSON with all files needed:"""
         return {"error": f"Error planning project: {str(e)}"}
 
 
-def create_project_file(state: AgentState) -> Dict:
+async def create_project_file(state: AgentState) -> Dict:
     """
     Create a single file as part of a project.
     This node runs in parallel for each file.
-    Uses async LLM calls with shared event loop for clean parallel execution.
+    Uses async LLM calls for true parallel execution without blocking.
     """
     file_path = state.get("file_path", "")
     file_description = state.get("file_description", "")
@@ -92,9 +91,9 @@ Description: {file_description}
 
 Generate the complete file content:"""
 
-        # Use synchronous invoke - LangGraph's parallel execution handles concurrency
+        # Use async invoke for true parallel execution
         invoke_start = datetime.now()
-        content = llm.invoke(prompt=user_prompt, system_prompt=system_prompt)
+        content = await llm.ainvoke(prompt=user_prompt, system_prompt=system_prompt)
         invoke_time = (datetime.now() - invoke_start).total_seconds()
         
         content = content.strip()

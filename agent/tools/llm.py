@@ -98,26 +98,3 @@ def get_llm(model: Optional[str] = None, temperature: float = 0.0) -> LLMWrapper
         _default_llm = LLMWrapper(model=model, temperature=temperature)
     
     return _default_llm
-
-
-def run_async(coro):
-    """
-    Helper to run async code from sync context.
-    Handles event loop properly - reuses existing loop if available, creates new one if not.
-    This is cleaner than asyncio.run() which always creates a new loop.
-    """
-    try:
-        # Try to get existing event loop
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # If loop is running, we need to run in a thread
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, coro)
-                return future.result()
-        else:
-            # Loop exists but not running - use it
-            return loop.run_until_complete(coro)
-    except RuntimeError:
-        # No event loop exists - create one
-        return asyncio.run(coro)

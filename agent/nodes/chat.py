@@ -4,7 +4,7 @@ from agent.state import AgentState
 from agent.tools.llm import get_llm
 
 
-def chat_response(state: AgentState) -> Dict:
+async def chat_response(state: AgentState) -> Dict:
     """
     Just normal chat - answers questions, says hi, talks about code.
     Passes the whole conversation history to the LLM so it remembers context.
@@ -45,7 +45,7 @@ Maintain conversation context and be genuinely helpful while showing personality
         conversation_context.append(f"user: {user_input}")
         full_prompt = "\n\n".join(conversation_context)
         
-        response_text = llm.invoke(prompt=full_prompt, system_prompt=system_prompt)
+        response_text = await llm.ainvoke(prompt=full_prompt, system_prompt=system_prompt)
         
         return {
             "response": response_text,

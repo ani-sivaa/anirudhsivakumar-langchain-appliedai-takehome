@@ -1,16 +1,21 @@
 import pytest
-from agent.graph import agent_graph
+import asyncio
+from agent.graph import get_agent_graph
 
 
-def test_streaming_basic():
+@pytest.mark.asyncio
+async def test_streaming_basic():
     """Test that streaming mode works and yields updates."""
+    agent_graph = await get_agent_graph()
     config = {"configurable": {"thread_id": "test-stream-001"}}
     
-    events = list(agent_graph.stream(
+    events = []
+    async for event in agent_graph.astream(
         {"user_input": "hello"},
         config=config,
         stream_mode="updates"
-    ))
+    ):
+        events.append(event)
     
     assert len(events) > 0
     
@@ -21,42 +26,47 @@ def test_streaming_basic():
     assert "determine_intent" in node_names
 
 
-def test_streaming_with_state_inspection():
-    """Test that we can inspect state after streaming."""
+@pytest.mark.asyncio
+async def test_streaming_with_state_inspection():
+    """Test that streaming maintains conversation context."""
+    agent_graph = await get_agent_graph()
     config = {"configurable": {"thread_id": "test-stream-002"}}
     
-    for _ in agent_graph.stream(
+    async for _ in agent_graph.astream(
         {"user_input": "What's 2+2?"},
         config=config,
         stream_mode="updates"
     ):
         pass
     
-    state = agent_graph.get_state(config)
+    state = await agent_graph.aget_state(config)
     
     assert state.values.get("action") is not None
     assert state.config["configurable"]["thread_id"] == "test-stream-002"
 
 
-def test_streaming_maintains_context():
+@pytest.mark.asyncio
+async def test_streaming_maintains_context():
     """Test that streaming maintains conversation context."""
+    agent_graph = await get_agent_graph()
     thread_id = "test-stream-context-001"
     config = {"configurable": {"thread_id": thread_id}}
     
-    list(agent_graph.stream(
+    async for _ in agent_graph.astream(
         {"user_input": "My name is Alice"},
         config=config,
         stream_mode="updates"
-    ))
+    ):
+        pass
     
-    list(agent_graph.stream(
+    async for _ in agent_graph.astream(
         {"user_input": "What did I just tell you?"},
         config=config,
         stream_mode="updates"
-    ))
+    ):
+        pass
     
-    state = agent_graph.get_state(config)
+    state = await agent_graph.aget_state(config)
     messages = state.values.get("messages", [])
     
     assert len(messages) >= 2
-

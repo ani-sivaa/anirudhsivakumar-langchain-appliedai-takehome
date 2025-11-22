@@ -7,7 +7,7 @@ from agent.tools.llm import get_llm
 from agent.tools.validation import validate_python_syntax, should_validate_syntax
 
 
-def modify_code(state: AgentState) -> Dict:
+async def modify_code(state: AgentState) -> Dict:
     """
     Uses LLM to modify file content based on user's instruction.
     If the instruction mentions "from conversation", it looks at chat history.
@@ -77,7 +77,7 @@ Instruction: {instruction}
 
 Provide the complete file content:"""
 
-        modified_content = llm.invoke(prompt=user_prompt, system_prompt=system_prompt)
+        modified_content = await llm.ainvoke(prompt=user_prompt, system_prompt=system_prompt)
         
         modified_content = modified_content.strip()
         if modified_content.startswith("```"):
@@ -98,10 +98,11 @@ Provide the complete file content:"""
         return {"error": f"Error modifying code: {str(e)}"}
 
 
-def modify_code_multi(state: AgentState) -> Dict:
+async def modify_code_multi(state: AgentState) -> Dict:
     """
     Modifies one file when doing parallel multi-file edits.
     Same as modify_code but for the parallel workflow.
+    Uses async LLM calls for true parallel execution without blocking.
     """
     path = state.get("path", "")
     contents = state.get("contents", {})
@@ -150,7 +151,7 @@ Instruction: {instruction}
 Provide the complete modified file content:"""
 
         llm_start = datetime.now()
-        modified_content = llm.invoke(prompt=user_prompt, system_prompt=system_prompt)
+        modified_content = await llm.ainvoke(prompt=user_prompt, system_prompt=system_prompt)
         llm_time = (datetime.now() - llm_start).total_seconds()
         
         modified_content = modified_content.strip()
