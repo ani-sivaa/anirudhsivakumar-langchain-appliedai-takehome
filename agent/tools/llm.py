@@ -1,5 +1,6 @@
 import os
 import time
+import asyncio
 from typing import Optional, Any
 
 from dotenv import load_dotenv
@@ -23,6 +24,20 @@ def retry_with_backoff(func, max_retries=3, initial_delay=1.0):
                 raise
             delay = initial_delay * (2 ** attempt)
             time.sleep(delay)
+
+
+async def retry_with_backoff_async(func, max_retries=3, initial_delay=1.0):
+    """
+    Async version of retry_with_backoff for async functions.
+    """
+    for attempt in range(max_retries):
+        try:
+            return await func()
+        except Exception as e:
+            if attempt == max_retries - 1:
+                raise
+            delay = initial_delay * (2 ** attempt)
+            await asyncio.sleep(delay)
 
 
 class LLMWrapper:
@@ -54,6 +69,23 @@ class LLMWrapper:
             return response.content
         
         return retry_with_backoff(_invoke, max_retries=3, initial_delay=1.0)
+    
+    async def ainvoke(self, prompt: str, system_prompt: Optional[str] = None, **kwargs: Any) -> str:
+        """
+        Async version of invoke for parallel execution.
+        """
+        messages = []
+        
+        if system_prompt:
+            messages.append(SystemMessage(content=system_prompt))
+        
+        messages.append(HumanMessage(content=prompt))
+        
+        async def _ainvoke():
+            response = await self.llm.ainvoke(messages, **kwargs)
+            return response.content
+        
+        return await retry_with_backoff_async(_ainvoke, max_retries=3, initial_delay=1.0)
 
 
 _default_llm: Optional[LLMWrapper] = None
@@ -66,3 +98,26 @@ def get_llm(model: Optional[str] = None, temperature: float = 0.0) -> LLMWrapper
         _default_llm = LLMWrapper(model=model, temperature=temperature)
     
     return _default_llm
+
+
+def run_async(coro):
+    """
+    Helper to run async code from sync context.
+    Handles event loop properly - reuses existing loop if available, creates new one if not.
+    This is cleaner than asyncio.run() which always creates a new loop.
+    """
+    try:
+        # Try to get existing event loop
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If loop is running, we need to run in a thread
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, coro)
+                return future.result()
+        else:
+            # Loop exists but not running - use it
+            return loop.run_until_complete(coro)
+    except RuntimeError:
+        # No event loop exists - create one
+        return asyncio.run(coro)

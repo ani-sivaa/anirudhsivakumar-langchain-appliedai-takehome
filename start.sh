@@ -5,7 +5,7 @@
 
 set -e  # Exit on error
 
-echo "🚀 Starting LangGraph Coding Agent..."
+echo " Starting LangGraph Coding Agent..."
 echo ""
 
 # Colors for output
@@ -17,7 +17,7 @@ NC='\033[0m' # No Color
 
 # Check if Python 3 is installed
 if ! command -v python3 &> /dev/null; then
-    echo -e "${RED}❌ Python 3 is not installed. Please install Python 3.8 or higher.${NC}"
+    echo -e "${RED} Python 3 is not installed. Please install Python 3.8 or higher.${NC}"
     exit 1
 fi
 
@@ -46,7 +46,7 @@ echo -e "${GREEN}✓${NC} Dependencies installed"
 # Check for .env file
 if [ ! -f ".env" ]; then
     echo ""
-    echo -e "${RED}⚠️  Missing .env file${NC}"
+    echo -e "${RED}  Missing .env file${NC}"
     echo ""
     echo "Creating .env file for you..."
     
@@ -63,7 +63,7 @@ EOF
     
     echo -e "${GREEN}✓${NC} Created .env file"
     echo ""
-    echo -e "${YELLOW}📝 ACTION REQUIRED:${NC}"
+    echo -e "${YELLOW} ACTION REQUIRED:${NC}"
     echo "1. Edit the .env file and add your OPENAI_API_KEY"
     echo "2. (Optional) Add PINECONE_API_KEY for semantic codebase search"
     echo ""
@@ -82,7 +82,7 @@ export $(grep -v '^#' .env | xargs)
 # Verify OpenAI API key is set
 if [ -z "$OPENAI_API_KEY" ] || [ "$OPENAI_API_KEY" = "your_openai_api_key_here" ]; then
     echo ""
-    echo -e "${RED}❌ OPENAI_API_KEY not configured in .env file${NC}"
+    echo -e "${RED}OPENAI_API_KEY not configured in .env file${NC}"
     echo ""
     echo "Please edit .env and add your OpenAI API key:"
     echo "  OPENAI_API_KEY=sk-..."

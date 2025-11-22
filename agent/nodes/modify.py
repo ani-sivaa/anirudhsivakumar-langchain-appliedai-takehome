@@ -1,4 +1,6 @@
 from typing import Dict
+from datetime import datetime
+from pathlib import Path
 
 from agent.state import AgentState
 from agent.tools.llm import get_llm
@@ -121,6 +123,10 @@ def modify_code_multi(state: AgentState) -> Dict:
         # Skip modification for errored files
         return {"modifications": {path: content}}
     
+    # Timing for parallel execution visibility
+    start_time = datetime.now()
+    short_path = Path(path).name if path else ""
+    
     try:
         llm = get_llm()
         
@@ -143,7 +149,9 @@ Instruction: {instruction}
 
 Provide the complete modified file content:"""
 
+        llm_start = datetime.now()
         modified_content = llm.invoke(prompt=user_prompt, system_prompt=system_prompt)
+        llm_time = (datetime.now() - llm_start).total_seconds()
         
         modified_content = modified_content.strip()
         if modified_content.startswith("```"):
@@ -157,6 +165,9 @@ Provide the complete modified file content:"""
             syntax_error = validate_python_syntax(modified_content)
             if syntax_error:
                 return {"modifications": {path: f"ERROR: Syntax error - {syntax_error}"}}
+        
+        total_time = (datetime.now() - start_time).total_seconds()
+        print(f"  [PARALLEL] Modified: {short_path} (LLM: {llm_time:.2f}s, Total: {total_time:.2f}s)", flush=True)
         
         return {"modifications": {path: modified_content}}
         

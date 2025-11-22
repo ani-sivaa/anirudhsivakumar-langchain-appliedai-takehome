@@ -1,0 +1,7 @@
+# External Python packages required for the calculator project
+
+# Uncomment the following line if you need a specific version of a package
+# package_name==version
+
+# Example:
+# numpy==1.21.2

@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Dict
+from datetime import datetime
 
 from agent.state import AgentState
 from agent.tools.path_resolver import resolve_path
@@ -126,6 +127,10 @@ def read_file_multi(state: AgentState) -> Dict:
         # Instead, write empty content which will be caught later
         return {"contents": {}}
     
+    # Timing for parallel execution visibility
+    start_time = datetime.now()
+    short_path = Path(path).name if path else ""
+    
     is_valid, error_msg = validate_path(path)
     if not is_valid:
         # Write to contents with error message as value
@@ -143,6 +148,9 @@ def read_file_multi(state: AgentState) -> Dict:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
         
+        elapsed = (datetime.now() - start_time).total_seconds()
+        print(f"  [PARALLEL] Read: {short_path} ({elapsed:.3f}s)", flush=True)
+        
         return {"contents": {path: content}}
         
     except Exception as e:
@@ -157,28 +165,28 @@ def write_file_multi(state: AgentState) -> Dict:
     path = state.get("path", "")
     modifications = state.get("modifications", {})
     
-    # EXTENSIVE DEBUG
-    all_state_keys = list(state.keys()) if state else []
-    contents_keys = list(state.get("contents", {}).keys()) if state.get("contents") else []
-    
     if not path:
-        return {"edit_results": [f"FAIL: Unknown - No path. State keys: {all_state_keys[:10]}"]}
+        return {"edit_results": [f"FAIL: Unknown - No path"]}
 
     is_valid, error_msg = validate_path(path)
     if not is_valid:
         return {"edit_results": [f"FAIL: {path} - {error_msg}"]}
 
     if not modifications:
-        return {"edit_results": [f"FAIL: {path} - modifications is empty/None. State keys: {all_state_keys[:10]}, contents keys: {contents_keys[:5]}"]}
+        return {"edit_results": [f"FAIL: {path} - modifications is empty/None"]}
 
     if path not in modifications:
-        return {"edit_results": [f"FAIL: {path} - Path not in modifications. Has: {list(modifications.keys())[:5]}"]}
+        return {"edit_results": [f"FAIL: {path} - Path not in modifications"]}
 
     content = modifications[path]
 
     # If content is an error message from previous stages, don't write it
     if isinstance(content, str) and content.startswith("ERROR:"):
         return {"edit_results": [f"FAIL: {path} - {content}"]}
+
+    # Timing for parallel execution visibility
+    start_time = datetime.now()
+    short_path = Path(path).name if path else ""
 
     try:
         file_path = Path(path).resolve()
@@ -187,7 +195,16 @@ def write_file_multi(state: AgentState) -> Dict:
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
 
-        return {"edit_results": [f"SUCCESS: {path}"]}
+        elapsed = (datetime.now() - start_time).total_seconds()
+        print(f"  [PARALLEL] Wrote: {short_path} ({elapsed:.3f}s)", flush=True)
+
+        # Use relative path for cleaner output
+        try:
+            rel_path = Path(path).relative_to(Path.cwd())
+            return {"edit_results": [f"SUCCESS: {rel_path}"]}
+        except ValueError:
+            # If relative path fails, use just the filename
+            return {"edit_results": [f"SUCCESS: {Path(path).name}"]}
 
     except Exception as e:
         return {"edit_results": [f"FAIL: {path} - {str(e)}"]}

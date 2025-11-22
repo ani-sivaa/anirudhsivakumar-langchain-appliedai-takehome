@@ -57,6 +57,8 @@ Use "edit_multi" for:
 - "refactor file1.py and file2.py"
 - "update logging in all these files: a.py, b.py, c.py"
 - "edit all these files" or "edit those files" - IMPORTANT: Look at conversation history to find which files were just mentioned/created
+- "edit all files in [folder]" or "edit all [folder] files" - Use shell command to discover files in that folder (e.g., "find calculator_project -type f -name '*.py'")
+- When user mentions a folder/project name, discover all files in that folder and edit them
 
 Use "project" for:
 - Creating multiple NEW files from scratch
@@ -109,6 +111,7 @@ Respond with valid JSON only:
     "action": "chat|edit|edit_multi|project|shell|install|remember|recall|project_context|index_codebase|ask_codebase",
     "path": "file path" (for edit),
     "paths": ["file1.py", "file2.py"] (for edit_multi),
+    "folder_path": "folder_name" (for edit_multi when user says "all files in [folder]"),
     "edit_instruction": "what to write or change" (for edit or edit_multi),
     "project_instruction": "full project description" (for project),
     "command": "shell command" (for shell),
@@ -126,6 +129,8 @@ Examples:
 - "add type hints to utils.py and main.py" → {"action": "edit_multi", "paths": ["utils.py", "main.py"], "edit_instruction": "add type hints"}
 - "refactor logging in file1.py, file2.py, file3.py" → {"action": "edit_multi", "paths": ["file1.py", "file2.py", "file3.py"], "edit_instruction": "refactor logging"}
 - "edit all these files to say hello" (after creating GOAT/README1.md, GOAT/README2.md...) → {"action": "edit_multi", "paths": ["GOAT/README1.md", "GOAT/README2.md", ...], "edit_instruction": "say hello"}
+- "edit all files in calculator_project to add my name" → {"action": "edit_multi", "folder_path": "calculator_project", "edit_instruction": "add my name Anirudh Sivakumar at the top in a comment"}
+- "edit all calculator project files" → {"action": "edit_multi", "folder_path": "calculator_project", "edit_instruction": "..."}
 - "in the anew folder write 5 readme files" → {"action": "project", "project_instruction": "create 5 readme files with random info in the anew folder"}
 - "create a website with html css" → {"action": "project", "project_instruction": "create a website with html css"}
 - "remember my name is John" → {"action": "remember", "memory_key": "name", "memory_value": {"name": "John"}}
@@ -137,7 +142,10 @@ Examples:
 - "explain the memory system" → {"action": "ask_codebase"}
 - "where is error handling implemented?" → {"action": "ask_codebase"}
 
-IMPORTANT: When user says "these files" or "those files" or "all files", look at the recent conversation context to find which specific files they're referring to. Extract the actual file paths from previous messages."""
+IMPORTANT: 
+- When user says "these files" or "those files" or "all files", look at the recent conversation context to find which specific files they're referring to. Extract the actual file paths from previous messages.
+- When user says "all files in [folder]" or "all [folder] files", you can use a folder_path field to indicate the folder, and the system will discover files automatically. Example: {"action": "edit_multi", "folder_path": "calculator_project", "edit_instruction": "add comment"}
+- If you can't find specific file paths but the user mentions a folder, use folder_path instead of paths."""
         
         context_lines = []
         if messages:
@@ -170,6 +178,9 @@ Classify the intent and extract parameters as JSON:"""
         
         if "paths" in intent_data:
             result["paths"] = intent_data["paths"]
+        
+        if "folder_path" in intent_data:
+            result["folder_path"] = intent_data["folder_path"]
         
         if "edit_instruction" in intent_data:
             result["edit_instruction"] = intent_data["edit_instruction"]

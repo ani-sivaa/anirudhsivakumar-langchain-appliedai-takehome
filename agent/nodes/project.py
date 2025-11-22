@@ -1,6 +1,8 @@
 import os
 import json
+import asyncio
 from typing import Dict
+from datetime import datetime
 
 from agent.state import AgentState
 from agent.tools.llm import get_llm
@@ -60,9 +62,15 @@ def create_project_file(state: AgentState) -> Dict:
     """
     Create a single file as part of a project.
     This node runs in parallel for each file.
+    Uses async LLM calls with shared event loop for clean parallel execution.
     """
     file_path = state.get("file_path", "")
     file_description = state.get("file_description", "")
+    
+    # Timing instrumentation with nice formatting
+    start_time = datetime.now()
+    start_timestamp = start_time.strftime("%H:%M:%S.%f")[:-3]
+    print(f"  [PARALLEL] Starting: {file_path} @ {start_timestamp}", flush=True)
     
     if not file_path or not file_description:
         return {"error": "Missing file path or description"}
@@ -83,8 +91,11 @@ Guidelines:
 Description: {file_description}
 
 Generate the complete file content:"""
-        
+
+        # Use synchronous invoke - LangGraph's parallel execution handles concurrency
+        invoke_start = datetime.now()
         content = llm.invoke(prompt=user_prompt, system_prompt=system_prompt)
+        invoke_time = (datetime.now() - invoke_start).total_seconds()
         
         content = content.strip()
         if content.startswith("```"):
@@ -98,21 +109,32 @@ Generate the complete file content:"""
             syntax_error = validate_python_syntax(content)
             if syntax_error:
                 return {
-                    "messages": [{"role": "assistant", "content": f"FAIL: {file_path} - {syntax_error}"}],
+                    "project_results": [f"FAIL: {file_path} - {syntax_error}"],
                     "error": f"Syntax error in generated file: {syntax_error}"
                 }
-        
+
         os.makedirs(os.path.dirname(file_path) if os.path.dirname(file_path) else ".", exist_ok=True)
-        
+
         with open(file_path, "w") as f:
             f.write(content)
-        
+
+        end_time = datetime.now()
+        total_time = (end_time - start_time).total_seconds()
+        end_timestamp = end_time.strftime("%H:%M:%S.%f")[:-3]
+        print(f"  [PARALLEL] Completed: {file_path} @ {end_timestamp} (LLM: {invoke_time:.2f}s, Total: {total_time:.2f}s)", flush=True)
+
         return {
-            "messages": [{"role": "assistant", "content": f"SUCCESS: {file_path}"}]
+            "project_results": [f"SUCCESS: {file_path}"]
         }
         
     except Exception as e:
-        return {"error": f"Error creating {file_path}: {str(e)}"}
+        end_time = datetime.now()
+        total_time = (end_time - start_time).total_seconds()
+        print(f"  [PARALLEL] Failed: {file_path} after {total_time:.2f}s - {str(e)}", flush=True)
+        return {
+            "project_results": [f"FAIL: {file_path} - {str(e)}"],
+            "error": f"Error creating {file_path}: {str(e)}"
+        }
 
 
 def collect_project_files(state: AgentState) -> Dict:
@@ -127,26 +149,36 @@ def summarize_project(state: AgentState) -> Dict:
     """
     Summarize project creation results.
     """
-    project_files = state.get("project_files", [])
-    messages = state.get("messages", [])
+    project_results = state.get("project_results", [])
     user_input = state.get("user_input", "")
-    
-    created_files = [msg.get("content", "") for msg in messages if msg.get("content", "").startswith("SUCCESS:")]
-    
-    if not created_files:
+
+    success_files = [r for r in project_results if r.startswith("SUCCESS:")]
+    failed_files = [r for r in project_results if r.startswith("FAIL:")]
+
+    if not success_files and not failed_files:
         return {
             "response": "No files were created",
             "error": "Project creation failed"
         }
-    
-    summary = f"Project complete! Created {len(created_files)} files:\n" + "\n".join(created_files)
-    
+
+    # Build summary
+    summary_lines = []
+    if success_files:
+        summary_lines.append(f"Project complete! Created {len(success_files)} file(s):")
+        summary_lines.extend(success_files)
+
+    if failed_files:
+        summary_lines.append(f"\n{len(failed_files)} file(s) failed:")
+        summary_lines.extend(failed_files)
+
+    summary = "\n".join(summary_lines)
+
     return {
         "response": summary,
         "messages": [
             {"role": "user", "content": user_input},
             {"role": "assistant", "content": summary}
         ],
-        "error": ""
+        "error": "Some files failed" if failed_files else ""
     }
 

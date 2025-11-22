@@ -333,6 +333,7 @@ def main():
                 thread_mgr.update_thread_activity(thread_id)
             
             interrupted = False
+            node_start_times = {}  # Track when nodes start
             for event in agent_graph.stream(
                 input_data,
                 config=config,
@@ -381,7 +382,7 @@ def main():
                                     console.print("[dim red]Please answer 'yes' or 'no'[/dim red]")
                             
                             # Update state with user's decision
-                            agent_graph.rune(config, {"approval_response": approval_response})
+                            agent_graph.update_state(config, {"approval_response": approval_response})
                             
                             # Show status
                             console.print()
@@ -397,37 +398,63 @@ def main():
                                     if resume_node_name == "__interrupt__":
                                         continue
                                     
-                                    console.print(f"[dim cyan]→ {resume_node_name}[/dim cyan]", end=" ")
+                                    # Track start time for parallel execution verification
+                                    start_time = datetime.now()
+                                    node_start_times[resume_node_name] = start_time
+                                    timestamp = start_time.strftime("%H:%M:%S.%f")[:-3]  # milliseconds
+                                    
+                                    # Parallel nodes show their own detailed output
+                                    parallel_nodes = {"read_file_multi", "modify_code_multi", "write_file_multi", "create_file"}
+                                    is_parallel_node = resume_node_name in parallel_nodes
+                                    
+                                    if not is_parallel_node:
+                                        console.print(f"[dim cyan]→ {resume_node_name}[/dim cyan] [dim]{timestamp}[/dim]", end=" ")
                                     
                                     if isinstance(resume_node_data, dict):
-                                        if resume_node_data.get("response"):
-                                            console.print()
+                                        if resume_node_data.get("response") and resume_node_name != "auto_memory":
+                                            # Skip printing response from auto_memory (it's a passthrough node)
+                                            if not is_parallel_node:
+                                                console.print()
                                             response = resume_node_data['response']
                                             console.print(f"[bright_green]{response}[/bright_green]")
                                         elif resume_node_data.get("error"):
-                                            console.print()
+                                            if not is_parallel_node:
+                                                console.print()
                                             console.print(f"[bold red]Error: {resume_node_data['error']}[/bold red]")
-                                        else:
+                                        elif not is_parallel_node:
                                             console.print("[dim]processing...[/dim]")
-                                    else:
+                                    elif not is_parallel_node:
                                         console.print("[dim]processing...[/dim]")
                         break
                     
                     # Normal node execution
-                    console.print(f"[dim cyan]→ {node_name}[/dim cyan]", end=" ")
+                    # Track start time for parallel execution verification
+                    start_time = datetime.now()
+                    node_start_times[node_name] = start_time
+                    timestamp = start_time.strftime("%H:%M:%S.%f")[:-3]  # milliseconds
+                    
+                    # Parallel nodes show their own detailed output, so skip redundant "processing..."
+                    parallel_nodes = {"read_file_multi", "modify_code_multi", "write_file_multi", "create_file"}
+                    is_parallel_node = node_name in parallel_nodes
+                    
+                    if not is_parallel_node:
+                        console.print(f"[dim cyan]→ {node_name}[/dim cyan] [dim]{timestamp}[/dim]", end=" ")
                     
                     # Check if node_data is a dict (some nodes might return None or other types)
                     if isinstance(node_data, dict):
-                        if node_data.get("response"):
-                            console.print()
+                        if node_data.get("response") and node_name != "auto_memory":
+                            # Skip printing response from auto_memory (it's a passthrough node)
+                            if not is_parallel_node:
+                                console.print()
                             response = node_data['response']
                             console.print(f"[bright_green]{response}[/bright_green]")
                         elif node_data.get("error"):
-                            console.print()
+                            if not is_parallel_node:
+                                console.print()
                             console.print(f"[bold red]Error: {node_data['error']}[/bold red]")
-                        else:
+                        elif not is_parallel_node:
                             console.print("[dim]processing...[/dim]")
-                    else:
+                    elif not is_parallel_node:
                         console.print("[dim]processing...[/dim]")
                 
                 # If interrupted, we handled the rest in the loop above

@@ -1,4 +1,5 @@
 from typing import Dict
+from pathlib import Path
 
 from agent.state import AgentState
 
@@ -25,17 +26,31 @@ def summarize_multi_edit(state: AgentState) -> Dict:
     success_count = sum(1 for r in edit_results if r.startswith("SUCCESS:"))
     failure_count = sum(1 for r in edit_results if r.startswith("FAIL:"))
     
-    summary_lines = [f"Multi-file edit complete: {len(paths)} file(s) processed"]
-    summary_lines.append("")
+    # Build cleaner summary
+    summary_lines = [f"Multi-file edit complete: {success_count} file(s) updated"]
     
-    for result in edit_results:
-        summary_lines.append(result)
+    if success_count > 0:
+        summary_lines.append("\nUpdated files:")
+        for result in edit_results:
+            if result.startswith("SUCCESS:"):
+                # Extract just the filename or relative path
+                file_path = result.replace("SUCCESS: ", "").strip()
+                try:
+                    # Try to show relative path
+                    rel_path = Path(file_path).relative_to(Path.cwd())
+                    summary_lines.append(f"  - {rel_path}")
+                except (ValueError, TypeError):
+                    # Fall back to just filename
+                    summary_lines.append(f"  - {Path(file_path).name}")
     
     if failure_count > 0:
-        summary_lines.append(f"\nResults: {success_count} succeeded, {failure_count} failed")
+        summary_lines.append(f"\n{failure_count} file(s) failed:")
+        for result in edit_results:
+            if result.startswith("FAIL:"):
+                file_path = result.replace("FAIL: ", "").split(" - ")[0]
+                summary_lines.append(f"  - {Path(file_path).name}")
         error_msg = "Some files failed to update"
     else:
-        summary_lines.append(f"\nAll {success_count} files updated successfully")
         error_msg = ""
     
     summary = "\n".join(summary_lines)

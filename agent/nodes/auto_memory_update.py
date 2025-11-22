@@ -64,10 +64,18 @@ def recall_project_context(state: AgentState) -> AgentState:
     - "What files exist in this project?"
     - "What's the project structure?"
     - "What did we build so far?"
+    - "What files are in calculator_project?"
     """
     try:
         store = get_memory_store()
         user_id = state.get("user_id", "default_user")
+        user_input = state.get("user_input", "").lower()
+        
+        # Check if user mentioned a specific folder/project
+        folder_filter = None
+        if "calculator_project" in user_input or "calculator" in user_input:
+            folder_filter = "calculator_project"
+        # Add more folder detection logic here if needed
         
         # Get current project structure from memory
         items = store.search(namespace=("project", "structure"))
@@ -76,7 +84,31 @@ def recall_project_context(state: AgentState) -> AgentState:
             latest = items[0]  # Most recent
             context = latest.get('value') if isinstance(latest, dict) else latest
             
-            response = f"""
+            all_files = context.get('all_files', [])
+            
+            # Filter by folder if specified
+            if folder_filter:
+                all_files = [f for f in all_files if f.startswith(folder_filter + "/") or f == folder_filter]
+                key_files = [f for f in context.get('key_files', []) if f.startswith(folder_filter + "/") or f == folder_filter]
+            else:
+                key_files = context.get('key_files', [])[:10]
+            
+            if folder_filter:
+                response = f"""
+Project Context: {folder_filter} (from memory)
+
+Files: {len(all_files)} files in {folder_filter}
+Last Updated: {context.get('last_updated', 'Never')}
+
+Key Files:
+{chr(10).join(f"  - {f}" for f in key_files[:10])}
+
+All Files ({len(all_files)} total):
+{chr(10).join(f"  - {f}" for f in sorted(all_files)[:30])}
+{"  ... and more" if len(all_files) > 30 else ""}
+"""
+            else:
+                response = f"""
 Project Context (from memory):
 
 Type: {context.get('project_type', 'Unknown')}
@@ -85,11 +117,11 @@ Files: {context.get('file_count', 0)} tracked files
 Last Updated: {context.get('last_updated', 'Never')}
 
 Key Files:
-{chr(10).join(f"  - {f}" for f in context.get('key_files', [])[:10])}
+{chr(10).join(f"  - {f}" for f in key_files)}
 
-All Files ({len(context.get('all_files', []))} total):
-{chr(10).join(f"  - {f}" for f in sorted(context.get('all_files', []))[:20])}
-{"  ... and more" if len(context.get('all_files', [])) > 20 else ""}
+All Files ({len(all_files)} total):
+{chr(10).join(f"  - {f}" for f in sorted(all_files)[:20])}
+{"  ... and more" if len(all_files) > 20 else ""}
 """
             
             return {**state, "response": response}

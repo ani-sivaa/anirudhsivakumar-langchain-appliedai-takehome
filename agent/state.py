@@ -38,9 +38,11 @@ class AgentState(TypedDict, total=False):
     
     # === MULTI FILE EDIT (parallel: fan-out read/modify/write) ===
     paths: List[str]  # Multiple files: ["a.py", "b.py", "c.py"]
+    folder_path: str  # Folder path for discovering files (e.g., "calculator_project")
     contents: Annotated[Dict[str, str], merge_dicts]  # {path: content} - merge_dicts combines from parallel reads
     modifications: Annotated[Dict[str, str], merge_dicts]  # {path: modified_content} - from parallel modifies
     edit_results: Annotated[List[str], add]  # ["✓ a.py", "✓ b.py"] - add reducer collects results
+    project_results: Annotated[List[str], add]  # ["SUCCESS: file.py"] - add reducer collects project file creation results
     
     # === SHELL EXECUTION ===
     command: str  # Shell command: "ls -la"
