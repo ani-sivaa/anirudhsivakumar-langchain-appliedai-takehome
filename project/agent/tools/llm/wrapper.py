@@ -73,6 +73,10 @@ class LLMWrapper:
     async def ainvoke(self, prompt: str, system_prompt: Optional[str] = None, **kwargs: Any) -> str:
         """
         Async version of invoke for parallel execution.
+        
+        This method is safe for concurrent calls - multiple parallel nodes can call
+        ainvoke() simultaneously on the same LLMWrapper instance without blocking.
+        The underlying ChatOpenAI client supports concurrent async requests.
         """
         messages = []
         
@@ -82,6 +86,7 @@ class LLMWrapper:
         messages.append(HumanMessage(content=prompt))
         
         async def _ainvoke():
+            # ChatOpenAI.ainvoke() supports concurrent async calls - no internal queuing
             response = await self.llm.ainvoke(messages, **kwargs)
             return response.content
         
@@ -92,6 +97,13 @@ _default_llm: Optional[LLMWrapper] = None
 
 
 def get_llm(model: Optional[str] = None, temperature: float = 0.0) -> LLMWrapper:
+    """
+    Get the default LLM instance (singleton pattern).
+    
+    The singleton is safe for concurrent async calls - multiple parallel nodes
+    can share the same LLMWrapper instance and call ainvoke() simultaneously
+    without blocking or queuing. Each async call is independent.
+    """
     global _default_llm
     
     if _default_llm is None:

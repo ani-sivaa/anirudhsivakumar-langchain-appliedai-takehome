@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from langchain_core.documents import Document
-from agent.tools.memory.pinecone_store import get_cached_vector_store
+from agent.tools.memory.pinecone_store import get_cached_vector_store, get_pinecone_vector_store
 
 
 # Files and directories to skip
@@ -399,7 +399,7 @@ def file_to_documents(file_path: Path, workspace_root: Path) -> List[Document]:
         return []
 
 
-def index_codebase(workspace_root: str = ".") -> Dict[str, Any]:
+def index_codebase(workspace_root: str = ".", namespace: str = "codebase") -> Dict[str, Any]:
     """
     Index entire codebase for semantic search.
 
@@ -408,6 +408,7 @@ def index_codebase(workspace_root: str = ".") -> Dict[str, Any]:
 
     Args:
         workspace_root: Path to workspace root (default: current directory)
+        namespace: Pinecone namespace to use (default: "codebase", can use "agent-generated-code" for user files)
 
     Returns:
         Dict with indexing results
@@ -415,6 +416,9 @@ def index_codebase(workspace_root: str = ".") -> Dict[str, Any]:
     Example:
         result = index_codebase(".")
         print(f"Indexed {result['total_chunks']} chunks from {result['total_files']} files")
+        
+        # Index agent-generated-code separately
+        result = index_codebase("agent-generated-code", namespace="agent-generated-code")
     """
     workspace_path = Path(workspace_root).resolve()
 
@@ -449,8 +453,8 @@ def index_codebase(workspace_root: str = ".") -> Dict[str, Any]:
         }
 
     try:
-        # Get vector store
-        vector_store = get_cached_vector_store(namespace="codebase")
+        # Get vector store with specified namespace
+        vector_store = get_cached_vector_store(namespace=namespace)
 
         # Add all documents (LangChain handles embedding + storage)
         vector_store.add_documents(documents)
@@ -458,7 +462,8 @@ def index_codebase(workspace_root: str = ".") -> Dict[str, Any]:
         return {
             'total_files': files_processed,
             'total_chunks': len(documents),
-            'workspace': str(workspace_path)
+            'workspace': str(workspace_path),
+            'namespace': namespace
         }
 
     except Exception as e:
@@ -471,13 +476,14 @@ def index_codebase(workspace_root: str = ".") -> Dict[str, Any]:
         }
 
 
-def search_codebase(query: str, k: int = 5) -> List[Document]:
+def search_codebase(query: str, k: int = 5, include_agent_generated: bool = True) -> List[Document]:
     """
     Semantic search over indexed codebase.
 
     Args:
         query: Natural language query
         k: Number of results to return
+        include_agent_generated: If True, also search agent-generated-code folder
 
     Returns:
         List of matching Documents with content and metadata
@@ -491,6 +497,45 @@ def search_codebase(query: str, k: int = 5) -> List[Document]:
     try:
         vector_store = get_cached_vector_store(namespace="codebase")
         results = vector_store.similarity_search(query, k=k)
+        
+        # If agent-generated-code should be included, search it separately and merge
+        if include_agent_generated:
+            try:
+                # Search agent-generated-code namespace if it exists
+                agent_store = get_pinecone_vector_store(namespace="agent-generated-code")
+                agent_results = agent_store.similarity_search(query, k=k)
+                
+                # Merge results, prioritizing agent-generated-code results
+                # Deduplicate by path
+                seen_paths = set()
+                merged = []
+                
+                # First add agent-generated-code results (higher priority)
+                for doc in agent_results:
+                    path = doc.metadata.get('path', '')
+                    if path and path not in seen_paths:
+                        seen_paths.add(path)
+                        merged.append(doc)
+                
+                # Then add main codebase results (avoid duplicates)
+                for doc in results:
+                    path = doc.metadata.get('path', '')
+                    if path and path not in seen_paths:
+                        seen_paths.add(path)
+                        merged.append(doc)
+                
+                # Return top k results
+                return merged[:k]
+            except Exception as e:
+                # If agent-generated-code namespace doesn't exist, filter main results
+                # Prioritize agent-generated-code results if they're in the main namespace
+                agent_results = [r for r in results if 'agent-generated-code' in r.metadata.get('path', '')]
+                project_results = [r for r in results if 'agent-generated-code' not in r.metadata.get('path', '')]
+                
+                # Prioritize agent-generated-code results, but still include project results
+                merged = agent_results + project_results
+                return merged[:k]
+        
         return results
     except Exception as e:
         return []

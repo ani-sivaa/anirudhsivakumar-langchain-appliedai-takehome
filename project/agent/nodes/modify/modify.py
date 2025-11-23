@@ -3,6 +3,8 @@ from typing import Dict
 from agent.state import AgentState
 from agent.tools.llm.wrapper import get_llm
 from agent.tools.validation.syntax import validate_python_syntax, should_validate_syntax
+from agent.tools.code.generation_chain import generate_code_with_review
+from agent.constants import ENABLE_CODE_REVIEW
 
 
 async def modify_code(state: AgentState) -> Dict:
@@ -26,7 +28,7 @@ async def modify_code(state: AgentState) -> Dict:
     try:
         llm = get_llm()
         
-        if "previous conversation" in instruction.lower() or "from conversation" in instruction.lower():
+        if any(phrase in instruction.lower() for phrase in ["previous conversation", "from conversation", "from the previous", "recalled", "from memory"]):
             context_lines = []
             if messages:
                 recent_messages = messages[-6:] if len(messages) > 6 else messages
@@ -75,22 +77,56 @@ Instruction: {instruction}
 
 Provide the complete file content:"""
 
-        modified_content = await llm.ainvoke(prompt=user_prompt, system_prompt=system_prompt)
-        
-        modified_content = modified_content.strip()
-        if modified_content.startswith("```"):
-            lines = modified_content.split("\n")
-            lines = lines[1:]
-            if lines and lines[-1].strip() == "```":
-                lines = lines[:-1]
-            modified_content = "\n".join(lines)
-        
-        if should_validate_syntax(path):
-            syntax_error = validate_python_syntax(modified_content)
-            if syntax_error:
-                return {"error": f"Generated code has syntax error: {syntax_error}"}
-        
-        return {"modified_content": modified_content, "error": ""}
+        # Use generation chain with review if enabled, otherwise use direct LLM call
+        if ENABLE_CODE_REVIEW:
+            result = await generate_code_with_review(
+                prompt=user_prompt,
+                system_prompt=system_prompt,
+                path=path
+            )
+            
+            modified_content = result.get("code", "")
+            review_feedback = result.get("review_feedback", [])
+            quality_score = result.get("quality_score", 1.0)
+            iterations = result.get("iterations", 1)
+            success = result.get("success", True)
+            
+            if not success:
+                error_msg = result.get("syntax_error", "Code generation failed")
+                if review_feedback:
+                    error_msg += f". Review feedback: {'; '.join(review_feedback)}"
+                return {
+                    "error": error_msg,
+                    "code_review_feedback": review_feedback,
+                    "code_generation_iterations": iterations,
+                    "code_quality_score": quality_score
+                }
+            
+            return {
+                "modified_content": modified_content,
+                "error": "",
+                "code_review_feedback": review_feedback,
+                "code_generation_iterations": iterations,
+                "code_quality_score": quality_score
+            }
+        else:
+            # Fallback to original direct LLM call
+            modified_content = await llm.ainvoke(prompt=user_prompt, system_prompt=system_prompt)
+            
+            modified_content = modified_content.strip()
+            if modified_content.startswith("```"):
+                lines = modified_content.split("\n")
+                lines = lines[1:]
+                if lines and lines[-1].strip() == "```":
+                    lines = lines[:-1]
+                modified_content = "\n".join(lines)
+            
+            if should_validate_syntax(path):
+                syntax_error = validate_python_syntax(modified_content)
+                if syntax_error:
+                    return {"error": f"Generated code has syntax error: {syntax_error}"}
+            
+            return {"modified_content": modified_content, "error": ""}
         
     except Exception as e:
         return {"error": f"Error modifying code: {str(e)}"}

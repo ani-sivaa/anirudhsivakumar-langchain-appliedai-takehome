@@ -26,3 +26,9 @@ class MessageRoles:
     ASSISTANT = "assistant"
     SYSTEM = "system"
 
+
+# Code Generation Review Configuration
+MAX_CODE_GENERATION_RETRIES = 3
+ENABLE_CODE_REVIEW = True
+CODE_QUALITY_THRESHOLD = 0.7  # Minimum quality score (0.0-1.0)
+

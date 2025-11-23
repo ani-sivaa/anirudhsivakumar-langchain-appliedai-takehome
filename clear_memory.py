@@ -18,9 +18,11 @@ except ImportError:
 
 # Use the same database paths as the agent code
 # Data folder is in the project directory
-MEMORY_DB_PATH = os.getenv("MEMORY_DB_PATH", "./project/data/long_term_memory.db")
-THREADS_DB_PATH = os.getenv("THREADS_DB_PATH", "./project/data/threads.db")
-CHECKPOINTS_DB_PATH = os.getenv("CHECKPOINTS_DB_PATH", "./project/data/checkpoints.db")
+# Find project directory relative to this script
+PROJECT_DIR = Path(__file__).parent / "project"
+MEMORY_DB_PATH = os.getenv("MEMORY_DB_PATH", str(PROJECT_DIR / "data" / "long_term_memory.db"))
+THREADS_DB_PATH = os.getenv("THREADS_DB_PATH", str(PROJECT_DIR / "data" / "threads.db"))
+CHECKPOINTS_DB_PATH = os.getenv("CHECKPOINTS_DB_PATH", str(PROJECT_DIR / "data" / "checkpoints.db"))
 
 # Clear SQLite databases
 db_files = {

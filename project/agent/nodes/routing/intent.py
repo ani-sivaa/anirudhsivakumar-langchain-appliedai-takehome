@@ -11,10 +11,30 @@ async def determine_intent(state: AgentState) -> Dict:
     Figures out what the user wants using an LLM.
     Takes the user's message + recent conversation and classifies it into an action.
     Returns stuff like action='edit', path='utils.py', edit_instruction='add type hints'.
+
+    Supports multi-step task orchestration:
+    - If task_queue exists and has remaining tasks, pop next task
+    - Otherwise, analyze user_input and potentially create a task queue
     """
+    # Check if we're in the middle of executing a task queue
+    task_queue = state.get("task_queue", [])
+    current_task_index = state.get("current_task_index", 0)
+
+    if task_queue and current_task_index < len(task_queue):
+        # Pop next task from queue
+        task = task_queue[current_task_index]
+        result = {
+            **task,
+            "task_queue": task_queue,
+            "current_task_index": current_task_index + 1,
+            "error": ""
+        }
+        return result
+
+    # No task queue or queue exhausted - analyze new user input
     user_input = state.get("user_input", "")
     messages = state.get("messages", [])
-    
+
     if not user_input:
         return {"error": "No user input provided"}
     
@@ -22,6 +42,23 @@ async def determine_intent(state: AgentState) -> Dict:
         llm = get_llm(temperature=0.0)
         
         system_prompt = """You are an intent classifier for a coding agent. Analyze the user's request and determine the appropriate action.
+
+MULTI-STEP REQUESTS:
+If the user's request contains multiple distinct actions (e.g., "recall my preferences, then create a project"), you can create a task_queue with ordered tasks.
+
+IMPORTANT: When a later task needs to use the result from an earlier task (especially recall/memory operations), the later task's instruction MUST explicitly reference "from the previous conversation" or "from the recalled memory" to ensure the data is available.
+
+Examples:
+- "Recall my name, then create a calculator project"
+  → {"task_queue": [{"action": "recall", "memory_key": "name"}, {"action": "project", "project_instruction": "create a calculator project"}]}
+
+- "Recall my name, then create a file with my name in it"
+  → {"task_queue": [{"action": "recall", "memory_key": "name"}, {"action": "edit", "path": "...", "edit_instruction": "write my name from the previous conversation"}]}
+
+- "Remember my preferences, then create a project using those preferences"
+  → {"task_queue": [{"action": "remember", "memory_key": "preferences", "memory_value": {...}}, {"action": "project", "project_instruction": "create a project using the preferences from the previous conversation"}]}
+
+For single-step requests, do not include task_queue - just return action and parameters directly.
 
 Available actions:
 - "chat": General conversation, questions, greetings (DEFAULT for non-action queries)
@@ -76,10 +113,12 @@ Use "install" for:
 Use "remember" for:
 - Saving user preferences, facts, or project information
 - "remember my name is X", "save that I prefer Y", "remember this project uses Z"
+- IMPORTANT: Extract a simple, specific key from the request (e.g., "name", "preference", "favorite_language")
 
 Use "recall" for:
 - Retrieving saved information
 - "what's my name?", "what do I prefer?", "what did I tell you about X?"
+- IMPORTANT: The memory_key must match what was saved. For "recall my name", use key "name" not "personal_info"
 
 Use "project_context" for:
 - Asking about the current project structure (file listing only, not conversation history)
@@ -94,6 +133,7 @@ Use "ask_codebase" for:
 - "how does the graph work?", "where is error handling?", "explain the memory system"
 - "what does this project do?", "how is X implemented?"
 - Technical questions about code architecture or implementation
+- IMPORTANT: For multi-step tasks, extract the actual question/topic (e.g., "ask about authentication" → query: "authentication")
 
 When user says "write it" or "save it", look at conversation history to understand what content they're referring to.
 
@@ -105,6 +145,7 @@ Extract relevant information:
 - For "shell": extract command (the shell command to run)
 - For "remember": extract memory_key (label) and memory_value (dict of info to save)
 - For "recall": extract memory_key (what to retrieve)
+- For "ask_codebase": extract codebase_query (the specific question/topic to search for)
 
 Respond with valid JSON only:
 {
@@ -117,7 +158,8 @@ Respond with valid JSON only:
     "command": "shell command" (for shell),
     "package_to_install": "package name" (for install),
     "memory_key": "key label" (for remember/recall),
-    "memory_value": {"key": "value"} (for remember)
+    "memory_value": {"key": "value"} (for remember),
+    "codebase_query": "specific question or topic" (for ask_codebase)
 }
 
 Examples:
@@ -135,12 +177,15 @@ Examples:
 - "create a website with html css" → {"action": "project", "project_instruction": "create a website with html css"}
 - "remember my name is John" → {"action": "remember", "memory_key": "name", "memory_value": {"name": "John"}}
 - "what's my name?" → {"action": "recall", "memory_key": "name"}
+- "remember my name is Alice, then recall my name" → {"task_queue": [{"action": "remember", "memory_key": "name", "memory_value": {"name": "Alice"}}, {"action": "recall", "memory_key": "name"}]}
+- "recall my name, then create a file with my name in it" → {"task_queue": [{"action": "recall", "memory_key": "name"}, {"action": "edit", "path": "...", "edit_instruction": "create a file with my name from the previous conversation"}]}
 - "what files exist in this project?" → {"action": "project_context"}
 - "show me the project structure" → {"action": "project_context"}
 - "index the codebase" → {"action": "index_codebase"}
-- "how does the graph work?" → {"action": "ask_codebase"}
-- "explain the memory system" → {"action": "ask_codebase"}
-- "where is error handling implemented?" → {"action": "ask_codebase"}
+- "how does the graph work?" → {"action": "ask_codebase", "codebase_query": "how does the graph work"}
+- "explain the memory system" → {"action": "ask_codebase", "codebase_query": "memory system"}
+- "where is error handling implemented?" → {"action": "ask_codebase", "codebase_query": "error handling"}
+- "index the codebase, then ask about authentication" → {"task_queue": [{"action": "index_codebase"}, {"action": "ask_codebase", "codebase_query": "authentication"}]}
 
 IMPORTANT: 
 - When user says "these files" or "those files" or "all files", look at the recent conversation context to find which specific files they're referring to. Extract the actual file paths from previous messages.
@@ -170,8 +215,37 @@ Classify the intent and extract parameters as JSON:"""
 
         response = await llm.ainvoke(prompt=user_prompt, system_prompt=system_prompt)
         intent_data = safe_json_parse(response, default={"action": "chat"})
-        
+
+        # Check if this is a multi-step request
+        if "task_queue" in intent_data:
+            task_queue = intent_data["task_queue"]
+            if task_queue and len(task_queue) > 0:
+                # Initialize task queue and return first task
+                first_task = task_queue[0]
+                result = {
+                    **first_task,
+                    "task_queue": task_queue,
+                    "current_task_index": 1,  # Next task to execute
+                    "error": ""
+                }
+
+                # Clear accumulated fields for first task if needed
+                if first_task.get("action") == "edit_multi":
+                    result["contents"] = {}
+                    result["modifications"] = {}
+                    result["edit_results"] = ["__CLEAR__"]
+
+                return result
+
+        # Single-step request - process normally
         result = {"action": intent_data.get("action", "chat")}
+
+        # Clear accumulated fields when starting a new operation to prevent state pollution
+        # This is especially important for edit_multi which uses reducers that accumulate
+        if intent_data.get("action") == "edit_multi":
+            result["contents"] = {}
+            result["modifications"] = {}
+            result["edit_results"] = ["__CLEAR__"]  # Use special marker to clear with custom reducer
         
         if "path" in intent_data:
             result["path"] = intent_data["path"]
@@ -205,7 +279,10 @@ Classify the intent and extract parameters as JSON:"""
         
         if "package_to_install" in intent_data:
             result["package_to_install"] = intent_data["package_to_install"]
-        
+
+        if "codebase_query" in intent_data:
+            result["codebase_query"] = intent_data["codebase_query"]
+
         result["error"] = ""
         return result
         
@@ -221,7 +298,7 @@ def route_action(state: AgentState) -> str:
     Used by the graph's conditional edges to decide the path.
     """
     action = state.get("action", "chat")
-    
+
     if action == "edit":
         return "read_file"
     elif action == "edit_multi":
@@ -244,4 +321,22 @@ def route_action(state: AgentState) -> str:
         return "ask_codebase"
 
     return "chat"
+
+
+def route_task_queue(state: AgentState) -> str:
+    """
+    Task queue router - checks if there are more tasks to execute.
+
+    Returns:
+    - "continue_tasks" if queue has more tasks (route back to determine_intent)
+    - "end" if queue is empty or exhausted (route to END)
+    """
+    task_queue = state.get("task_queue", [])
+    current_task_index = state.get("current_task_index", 0)
+
+    # Check if there are more tasks in the queue
+    if task_queue and current_task_index < len(task_queue):
+        return "continue_tasks"
+
+    return "end"
 

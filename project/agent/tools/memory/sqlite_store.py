@@ -9,7 +9,9 @@ class SQLiteStore:
     def __init__(self, db_path: str = None):
         # Use absolute path to ensure it works regardless of current working directory
         if db_path is None:
-            db_path = str(Path.cwd() / "project" / "data" / "long_term_memory.db")
+            # Find project directory (where agent folder is located)
+            project_dir = Path(__file__).parent.parent.parent.parent  # memory -> tools -> agent -> project/
+            db_path = str(project_dir / "data" / "long_term_memory.db")
         self.db_path = db_path
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._init_db()

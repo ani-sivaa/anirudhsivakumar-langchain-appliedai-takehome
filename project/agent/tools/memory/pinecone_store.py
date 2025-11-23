@@ -17,7 +17,7 @@ Architecture:
 """
 
 import os
-from typing import List, Optional
+from typing import List, Optional, Dict
 from pinecone import Pinecone
 from langchain_pinecone import PineconeVectorStore
 from langchain_openai import OpenAIEmbeddings
@@ -93,15 +93,20 @@ def get_pinecone_vector_store(
 _vector_store: Optional[PineconeVectorStore] = None
 
 
+# Cache stores by namespace
+_vector_stores: Dict[str, PineconeVectorStore] = {}
+
+
 def get_cached_vector_store(namespace: str = "codebase") -> PineconeVectorStore:
     """
-    Get cached vector store instance (singleton pattern).
+    Get cached vector store instance (singleton pattern per namespace).
 
     This ensures we reuse the same connection throughout the app.
+    Different namespaces get different cached instances.
     """
-    global _vector_store
+    global _vector_stores
 
-    if _vector_store is None:
-        _vector_store = get_pinecone_vector_store(namespace=namespace)
+    if namespace not in _vector_stores:
+        _vector_stores[namespace] = get_pinecone_vector_store(namespace=namespace)
 
-    return _vector_store
+    return _vector_stores[namespace]

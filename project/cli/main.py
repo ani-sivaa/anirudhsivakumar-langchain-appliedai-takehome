@@ -6,15 +6,80 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.table import Table
 from rich.prompt import Prompt, Confirm
+from rich.markdown import Markdown
 from datetime import datetime
 
-from agent.graph import get_agent_graph
+from agent.graph import get_agent_graph, close_agent_graph
 from agent.tools.memory.interface import get_memory_stats
 from agent.tools.code.indexer import index_codebase, search_codebase
 from agent.tools.thread_manager import get_thread_manager
 
 
 console = Console()
+
+
+# Node name to human-readable message mapping
+NODE_MESSAGES = {
+    "determine_intent": "Understanding your request",
+    "check_approval": "Checking if approval is needed",
+    "request_approval": "Requesting your approval",
+    "denied": "Operation was denied",
+    "chat": "Generating response",
+    "read_file": "Reading file",
+    "modify_code": "Modifying code",
+    "write_file": "Writing file",
+    "edit_multi": "Preparing multi-file edit",
+    "read_file_multi": "Reading files",
+    "edit_multi_modify": "Preparing to modify files",
+    "modify_code_multi": "Modifying files",
+    "edit_multi_write": "Preparing to write files",
+    "write_file_multi": "Writing files",
+    "summarize_multi_edit": "Summarizing changes",
+    "shell": "Running command",
+    "install": "Installing package",
+    "prepare_retry": "Preparing to retry",
+    "save_memory": "Saving to memory",
+    "recall_memory": "Recalling from memory",
+    "plan_project": "Planning project structure",
+    "create_file": "Creating files",
+    "collect_project_files": "Collecting project files",
+    "summarize_project": "Summarizing project",
+    "auto_memory": "Updating project memory",
+    "project_context": "Recalling project context",
+    "index_codebase": "Indexing codebase",
+    "ask_codebase": "Searching codebase",
+}
+
+
+def get_node_message(node_name: str) -> str:
+    """Get human-readable message for a node, with node name in parentheses."""
+    message = NODE_MESSAGES.get(node_name, "Processing")
+    return f"{message} ({node_name})"
+
+
+def is_markdown_response(text: str) -> bool:
+    """Check if response contains markdown formatting."""
+    markdown_indicators = [
+        text.startswith('#'),  # Headers
+        '\n#' in text,  # Headers in middle
+        '```' in text,  # Code blocks
+        '**' in text,  # Bold
+        '- ' in text or '* ' in text,  # Lists
+    ]
+    return any(markdown_indicators)
+
+
+def render_response(response: str):
+    """Render response with proper markdown formatting if applicable."""
+    if is_markdown_response(response):
+        # Render as markdown
+        console.print(Markdown(response))
+    elif len(response) > 200:
+        # Long non-markdown responses get a panel
+        console.print(Panel(response, border_style="bright_green", padding=(1, 2)))
+    else:
+        # Short responses are inline
+        console.print(f"[bright_green]{response}[/bright_green]")
 
 
 def show_thread_menu() -> tuple[str, str]:
@@ -200,6 +265,10 @@ def handle_special_command(command: str, current_thread_id: str, current_thread_
 
 def auto_index_codebase():
     """Auto-index the codebase on startup."""
+    from pathlib import Path
+    workspace_root = Path.cwd()
+    agent_generated_folder = workspace_root.parent / "agent-generated-code"
+    
     console.print("[dim yellow]Indexing codebase for semantic search...[/dim yellow]")
     result = index_codebase(".")
 
@@ -207,278 +276,323 @@ def auto_index_codebase():
         console.print(f"[dim red]Indexing failed: {result['error']}[/dim red]")
     else:
         console.print(f"[dim green]Indexed {result.get('total_files', 0)} files successfully[/dim green]")
+    
+    # Also index agent-generated-code if it exists
+    if agent_generated_folder.exists() and agent_generated_folder.is_dir():
+        try:
+            agent_result = index_codebase(str(agent_generated_folder), namespace="agent-generated-code")
+            if not agent_result.get("error") and agent_result.get('total_files', 0) > 0:
+                console.print(f"[dim green]Indexed {agent_result.get('total_files', 0)} user-created files[/dim green]")
+        except Exception:
+            # Silently fail if agent-generated-code indexing fails
+            pass
 
 
 async def async_main():
     # Initialize graph asynchronously
     agent_graph = await get_agent_graph()
     
-    title = Text("Anicode(A coding Agent that uses the LangGraph framework)", style="bold magenta blink")
+    try:
+        title = Text("Anicode(A coding Agent that uses the LangGraph framework)", style="bold magenta blink")
 
-    description = Text(
-        "Hey Brace & Palash! This agent can edit files, have conversations about code, and answer questions.\n"
-        "My approach: Leveraging LangGraph's full capabilities including serial nodes, parallel execution, conditional edges, and reducers to build a sophisticated agent architecture.\n"
-        "Watch me think in real-time as I process your requests!",
-        style="bright_cyan"
-    )
-    subtitle = Text("Type 'exit' to quit | '/help' for commands | Ctrl+C to interrupt", style="bright_cyan")
+        description = Text(
+            "Hey Brace & Palash! This agent can edit files, have conversations about code, and answer questions.\n"
+            "My approach: Leveraging LangGraph's full capabilities including serial nodes, parallel execution, conditional edges, and reducers to build a sophisticated agent architecture.\n"
+            "Watch me think in real-time as I process your requests!",
+            style="bright_cyan"
+        )
+        subtitle = Text("Type 'exit' to quit | '/help' for commands | Ctrl+C to interrupt", style="bright_cyan")
 
-    console.print(Panel.fit(
-        Text.assemble(title, "\n", description, "\n", subtitle),
-        border_style="bright_magenta"
-    ))
+        console.print(Panel.fit(
+            Text.assemble(title, "\n", description, "\n", subtitle),
+            border_style="bright_magenta"
+        ))
 
-    # Show entries count only
-    memory_stats = get_memory_stats()
-    if memory_stats.get("persistent"):
-        console.print(f"[dim green]{memory_stats.get('total_entries', 0)} entries[/dim green]")
+        # Show entries count only
+        memory_stats = get_memory_stats()
+        if memory_stats.get("persistent"):
+            console.print(f"[dim green]{memory_stats.get('total_entries', 0)} entries[/dim green]")
 
-    # Auto-index codebase on startup
-    auto_index_codebase()
+        # Auto-index codebase on startup
+        auto_index_codebase()
 
-    # Thread selection
-    thread_id, thread_name = show_thread_menu()
-    thread_mgr = get_thread_manager()
-    
-    config = {"configurable": {"thread_id": thread_id, "max_concurrency": 50}}
-    
-    # Show current thread name in status
-    console.print(f"[dim cyan]Current conversation: {thread_name}[/dim cyan]")
-    console.print(f"[dim]Type /help to see thread management commands[/dim]\n")
-    
-    while True:
-        try:
-            user_input = console.input("\n[bold bright_cyan]>[/bold bright_cyan] ")
-        except EOFError:
-            console.print("\n[bright_magenta]Bye[/bright_magenta]")
-            break
-        except KeyboardInterrupt:
-            # Ctrl+C at input prompt - ask if they want to quit
-            console.print()
+        # Thread selection
+        thread_id, thread_name = show_thread_menu()
+        thread_mgr = get_thread_manager()
+        
+        config = {"configurable": {"thread_id": thread_id, "max_concurrency": 50}}
+        
+        # Show current thread name in status
+        console.print(f"[dim cyan]Current conversation: {thread_name}[/dim cyan]")
+        console.print(f"[dim]Type /help to see thread management commands[/dim]\n")
+        
+        while True:
             try:
-                confirm = console.input("[dim yellow]Quit? (y/n):[/dim yellow] ").strip().lower()
-                if confirm in ['y', 'yes']:
-                    console.print("[bright_magenta]Bye[/bright_magenta]")
-                    break
-                else:
-                    continue
-            except (KeyboardInterrupt, EOFError):
+                user_input = console.input("\n[bold bright_cyan]>[/bold bright_cyan] ")
+            except EOFError:
                 console.print("\n[bright_magenta]Bye[/bright_magenta]")
+                # Cleanup before breaking
+                await close_agent_graph()
                 break
-        
-        if user_input.strip().lower() in ["exit", "quit"]:
-            console.print("[bright_magenta]Bye[/bright_magenta]")
-            break
-        
-        if not user_input.strip():
-            continue
-        
-        # Handle special commands
-        if user_input.strip().startswith("/"):
-            handled, thread_id, thread_name = handle_special_command(
-                user_input.strip(), 
-                thread_id, 
-                thread_name
-            )
-            if handled:
-                # Update config if thread changed
-                config = {"configurable": {"thread_id": thread_id, "max_concurrency": 50}}
-                continue
-        
-        console.print()
-        node_count = 0
-        
-        # Check if we should resume from interrupted checkpoint
-        state = await agent_graph.aget_state(config)
-        
-        # Only resume if there are actual pending nodes AND it's not already been processed
-        # If state.next is empty or None, the graph has finished and we should start fresh
-        is_resuming = False
-        if state.next and len(state.next) > 0:
-            # Check if this is a stale approval request (already denied/approved)
-            # If approval_response exists in state, we've already processed this approval
-            if "request_approval" in state.next:
-                approval_response = state.values.get("approval_response")
-                if approval_response:
-                    # This approval was already processed - don't resume it
-                    # Start fresh with new input
-                    is_resuming = False
-                else:
-                    # Real pending approval - resume
-                    is_resuming = True
-                    console.print(f"[dim yellow]Resuming from pending approval...[/dim yellow]")
-            else:
-                # Other pending nodes - resume normally
-                is_resuming = True
-                console.print(f"[dim yellow]Resuming from checkpoint...[/dim yellow]")
-        
-        try:
-            # If resuming, pass None to continue from checkpoint
-            # Otherwise pass new user input
-            if is_resuming:
-                input_data = None
-            else:
-                # Just pass user input - LangGraph will merge with checkpoint state
-                # The nodes themselves will add to messages via the 'add' reducer
-                input_data = {"user_input": user_input}
-            
-            # Update thread metadata - auto-name if first message
-            thread = thread_mgr.get_thread_by_id(thread_id)
-            if thread and thread['message_count'] == 0 and not is_resuming:
-                # First message - auto-name the thread
-                new_name = thread_mgr._generate_name_from_message(user_input)
-                thread_mgr.rename_thread(thread_id, new_name)
-                thread_name = new_name
-            
-            # Update activity
-            if not is_resuming:
-                thread_mgr.update_thread_activity(thread_id)
-            
-            interrupted = False
-            node_start_times = {}  # Track when nodes start
-            async for event in agent_graph.astream(
-                input_data,
-                config=config,
-                stream_mode="updates"
-            ):
-                node_count += 1
-                
-                for node_name, node_data in event.items():
-                    # Check if this is an interrupt event
-                    if node_name == "__interrupt__":
-                        interrupted = True
-                        console.print()
-                        
-                        # Get the current state to access approval_request
-                        state = await agent_graph.aget_state(config)
-                        approval_request = state.values.get("approval_request", {})
-                        
-                        if approval_request:
-                            console.print(Panel.fit(
-                                Text.assemble(
-                                    Text("APPROVAL REQUIRED\n\n", style="bold yellow"),
-                                    Text(f"Type: ", style="dim"),
-                                    Text(f"{approval_request.get('type', 'unknown')}\n", style="bright_white"),
-                                    Text(f"Warning: ", style="dim"),
-                                    Text(f"{approval_request.get('warning', '')}\n\n", style="bold red"),
-                                    Text(f"{approval_request.get('question', 'Approve this operation?')}\n", style="bright_yellow"),
-                                    Text(f"\nCommand: ", style="dim") if approval_request.get('command') else Text(""),
-                                    Text(f"{approval_request.get('command', '')}\n", style="bright_red") if approval_request.get('command') else Text(""),
-                                    Text(f"\nFile: ", style="dim") if approval_request.get('path') else Text(""),
-                                    Text(f"{approval_request.get('path', '')}\n", style="bright_cyan") if approval_request.get('path') else Text(""),
-                                ),
-                                border_style="bold yellow",
-                                title="[bold yellow]Human Approval Needed[/bold yellow]"
-                            ))
-                            
-                            # Get user's decision
-                            while True:
-                                decision = console.input("\n[bold bright_yellow]Approve? (yes/no):[/bold bright_yellow] ").strip().lower()
-                                if decision in ['yes', 'y', 'approve']:
-                                    approval_response = "approve"
-                                    break
-                                elif decision in ['no', 'n', 'deny', 'cancel']:
-                                    approval_response = "deny"
-                                    break
-                                else:
-                                    console.print("[dim red]Please answer 'yes' or 'no'[/dim red]")
-                            
-                            # Update state with user's decision
-                            await agent_graph.aupdate_state(config, {"approval_response": approval_response})
-                            
-                            # Show status
-                            console.print()
-                            if approval_response == "approve":
-                                console.print("[dim green]Approved - resuming execution...[/dim green]\n")
-                            else:
-                                console.print("[dim red]Denied - cancelling operation...[/dim red]\n")
-                            
-                            # Resume execution and make sure we fully drain the stream
-                            async for resume_event in agent_graph.astream(None, config=config, stream_mode="updates"):
-                                for resume_node_name, resume_node_data in resume_event.items():
-                                    # Skip any __interrupt__ events in resume - they're already handled
-                                    if resume_node_name == "__interrupt__":
-                                        continue
-                                    
-                                    # Track start time for parallel execution verification
-                                    start_time = datetime.now()
-                                    node_start_times[resume_node_name] = start_time
-                                    timestamp = start_time.strftime("%H:%M:%S.%f")[:-3]  # milliseconds
-                                    
-                                    # Parallel nodes show their own detailed output
-                                    parallel_nodes = {"read_file_multi", "modify_code_multi", "write_file_multi", "create_file"}
-                                    is_parallel_node = resume_node_name in parallel_nodes
-                                    
-                                    if not is_parallel_node:
-                                        console.print(f"[dim cyan]→ {resume_node_name}[/dim cyan] [dim]{timestamp}[/dim]", end=" ")
-                                    
-                                    if isinstance(resume_node_data, dict):
-                                        if resume_node_data.get("response") and resume_node_name != "auto_memory":
-                                            # Skip printing response from auto_memory (it's a passthrough node)
-                                            if not is_parallel_node:
-                                                console.print()
-                                            response = resume_node_data['response']
-                                            console.print(f"[bright_green]{response}[/bright_green]")
-                                        elif resume_node_data.get("error"):
-                                            if not is_parallel_node:
-                                                console.print()
-                                            console.print(f"[bold red]Error: {resume_node_data['error']}[/bold red]")
-                                        elif not is_parallel_node:
-                                            console.print("[dim]processing...[/dim]")
-                                    elif not is_parallel_node:
-                                        console.print("[dim]processing...[/dim]")
+            except KeyboardInterrupt:
+                # Ctrl+C at input prompt - ask if they want to quit
+                console.print()
+                try:
+                    confirm = console.input("[dim yellow]Quit? (y/n):[/dim yellow] ").strip().lower()
+                    if confirm in ['y', 'yes']:
+                        console.print("[bright_magenta]Bye[/bright_magenta]")
+                        # Cleanup before breaking
+                        await close_agent_graph()
                         break
+                    else:
+                        continue
+                except (KeyboardInterrupt, EOFError):
+                    console.print("\n[bright_magenta]Bye[/bright_magenta]")
+                    # Cleanup before breaking
+                    await close_agent_graph()
+                    break
+            
+            if user_input.strip().lower() in ["exit", "quit"]:
+                console.print("[bright_magenta]Bye[/bright_magenta]")
+                # Cleanup before breaking
+                await close_agent_graph()
+                break
+            
+            if not user_input.strip():
+                continue
+            
+            # Handle special commands
+            if user_input.strip().startswith("/"):
+                handled, thread_id, thread_name = handle_special_command(
+                    user_input.strip(), 
+                    thread_id, 
+                    thread_name
+                )
+                if handled:
+                    # Update config if thread changed
+                    config = {"configurable": {"thread_id": thread_id, "max_concurrency": 50}}
+                    continue
+            
+            console.print()
+            node_count = 0
+            task_count = 0  # Track task queue iterations
+
+            # Check if we should resume from interrupted checkpoint
+            state = await agent_graph.aget_state(config)
+            
+            # Only resume if there are actual pending nodes AND it's not already been processed
+            # If state.next is empty or None, the graph has finished and we should start fresh
+            is_resuming = False
+            if state.next and len(state.next) > 0:
+                # Check if this is a stale approval request (already denied/approved)
+                # If approval_response exists in state, we've already processed this approval
+                if "request_approval" in state.next:
+                    approval_response = state.values.get("approval_response")
+                    if approval_response:
+                        # This approval was already processed - don't resume it
+                        # Start fresh with new input
+                        is_resuming = False
+                    else:
+                        # Real pending approval - resume
+                        is_resuming = True
+                        console.print(f"[dim yellow]Resuming from pending approval...[/dim yellow]")
+                else:
+                    # Other pending nodes - resume normally
+                    is_resuming = True
+                    console.print(f"[dim yellow]Resuming from checkpoint...[/dim yellow]")
+            
+            try:
+                # If resuming, pass None to continue from checkpoint
+                # Otherwise pass new user input
+                if is_resuming:
+                    input_data = None
+                else:
+                    # Just pass user input - LangGraph will merge with checkpoint state
+                    # The nodes themselves will add to messages via the 'add' reducer
+                    input_data = {"user_input": user_input}
+                
+                # Update thread metadata - auto-name if first message
+                thread = thread_mgr.get_thread_by_id(thread_id)
+                if thread and thread['message_count'] == 0 and not is_resuming:
+                    # First message - auto-name the thread
+                    new_name = thread_mgr._generate_name_from_message(user_input)
+                    thread_mgr.rename_thread(thread_id, new_name)
+                    thread_name = new_name
+                
+                # Update activity
+                if not is_resuming:
+                    thread_mgr.update_thread_activity(thread_id)
+                
+                interrupted = False
+                node_start_times = {}  # Track when nodes start
+                async for event in agent_graph.astream(
+                    input_data,
+                    config=config,
+                    stream_mode="updates"
+                ):
+                    node_count += 1
+                    
+                    for node_name, node_data in event.items():
+                        # Check if this is an interrupt event
+                        if node_name == "__interrupt__":
+                            interrupted = True
+                            console.print()
+                            
+                            # Get the current state to access approval_request
+                            state = await agent_graph.aget_state(config)
+                            approval_request = state.values.get("approval_request", {})
+                            
+                            if approval_request:
+                                console.print(Panel.fit(
+                                    Text.assemble(
+                                        Text("APPROVAL REQUIRED\n\n", style="bold yellow"),
+                                        Text(f"Type: ", style="dim"),
+                                        Text(f"{approval_request.get('type', 'unknown')}\n", style="bright_white"),
+                                        Text(f"Warning: ", style="dim"),
+                                        Text(f"{approval_request.get('warning', '')}\n\n", style="bold red"),
+                                        Text(f"{approval_request.get('question', 'Approve this operation?')}\n", style="bright_yellow"),
+                                        Text(f"\nCommand: ", style="dim") if approval_request.get('command') else Text(""),
+                                        Text(f"{approval_request.get('command', '')}\n", style="bright_red") if approval_request.get('command') else Text(""),
+                                        Text(f"\nFile: ", style="dim") if approval_request.get('path') else Text(""),
+                                        Text(f"{approval_request.get('path', '')}\n", style="bright_cyan") if approval_request.get('path') else Text(""),
+                                    ),
+                                    border_style="bold yellow",
+                                    title="[bold yellow]Human Approval Needed[/bold yellow]"
+                                ))
+                                
+                                # Get user's decision
+                                while True:
+                                    decision = console.input("\n[bold bright_yellow]Approve? (yes/no):[/bold bright_yellow] ").strip().lower()
+                                    if decision in ['yes', 'y', 'approve']:
+                                        approval_response = "approve"
+                                        break
+                                    elif decision in ['no', 'n', 'deny', 'cancel']:
+                                        approval_response = "deny"
+                                        break
+                                    else:
+                                        console.print("[dim red]Please answer 'yes' or 'no'[/dim red]")
+                                
+                                # Update state with user's decision
+                                await agent_graph.aupdate_state(config, {"approval_response": approval_response})
+                                
+                                # Show status
+                                console.print()
+                                if approval_response == "approve":
+                                    console.print("[dim green]Approved - resuming execution...[/dim green]\n")
+                                else:
+                                    console.print("[dim red]Denied - cancelling operation...[/dim red]\n")
+                                
+                                # Resume execution and make sure we fully drain the stream
+                                async for resume_event in agent_graph.astream(None, config=config, stream_mode="updates"):
+                                    for resume_node_name, resume_node_data in resume_event.items():
+                                        # Skip any __interrupt__ events in resume - they're already handled
+                                        if resume_node_name == "__interrupt__":
+                                            continue
+                                        
+                                        # Track start time for parallel execution verification
+                                        start_time = datetime.now()
+                                        node_start_times[resume_node_name] = start_time
+
+                                        # Parallel nodes show their own detailed output
+                                        parallel_nodes = {"read_file_multi", "modify_code_multi", "write_file_multi", "create_file"}
+                                        is_parallel_node = resume_node_name in parallel_nodes
+
+                                        # Hide repetitive routing nodes and internal bookkeeping nodes
+                                        hide_nodes = {"determine_intent", "check_approval", "auto_memory"}
+                                        should_hide = resume_node_name in hide_nodes
+
+                                        if not is_parallel_node and not should_hide:
+                                            node_msg = get_node_message(resume_node_name)
+                                            console.print(f"[dim cyan]→ {node_msg}[/dim cyan]", end=" ")
+
+                                        if isinstance(resume_node_data, dict):
+                                            if resume_node_data.get("response") and resume_node_name != "auto_memory":
+                                                # Skip printing response from auto_memory (it's a passthrough node)
+                                                if not is_parallel_node and not should_hide:
+                                                    console.print()
+                                                response = resume_node_data['response']
+                                                render_response(response)
+                                            elif resume_node_data.get("error"):
+                                                if not is_parallel_node and not should_hide:
+                                                    console.print()
+                                                console.print(f"[bold red]Error: {resume_node_data['error']}[/bold red]")
+                                            elif not is_parallel_node and not should_hide:
+                                                console.print()
+                                        elif not is_parallel_node and not should_hide:
+                                            console.print()
+                            break
                     
                     # Normal node execution
                     # Track start time for parallel execution verification
                     start_time = datetime.now()
                     node_start_times[node_name] = start_time
-                    timestamp = start_time.strftime("%H:%M:%S.%f")[:-3]  # milliseconds
-                    
-                    # Parallel nodes show their own detailed output, so skip redundant "processing..."
+
+                    # Parallel nodes show their own detailed output, so skip redundant messages
                     parallel_nodes = {"read_file_multi", "modify_code_multi", "write_file_multi", "create_file"}
                     is_parallel_node = node_name in parallel_nodes
-                    
-                    if not is_parallel_node:
-                        console.print(f"[dim cyan]→ {node_name}[/dim cyan] [dim]{timestamp}[/dim]", end=" ")
-                    
+
+                    # Hide repetitive routing nodes and internal bookkeeping nodes
+                    hide_nodes = {"determine_intent", "check_approval", "auto_memory"}
+                    # Hide routing nodes after first task, always hide auto_memory
+                    should_hide = (node_name in {"determine_intent", "check_approval"} and node_count > 2) or node_name == "auto_memory"
+
+                    # Track when we start a new task in the queue
+                    if node_name == "determine_intent" and node_count > 2:
+                        task_count += 1
+                        if task_count > 1:
+                            console.print(f"\n[dim yellow]→ Processing next task...[/dim yellow]")
+
+                    if not is_parallel_node and not should_hide:
+                        node_msg = get_node_message(node_name)
+                        console.print(f"[dim cyan]→ {node_msg}[/dim cyan]", end=" ")
+
                     # Check if node_data is a dict (some nodes might return None or other types)
                     if isinstance(node_data, dict):
                         if node_data.get("response") and node_name != "auto_memory":
                             # Skip printing response from auto_memory (it's a passthrough node)
-                            if not is_parallel_node:
+                            if not is_parallel_node and not should_hide:
                                 console.print()
+                            # Render response with proper markdown formatting
                             response = node_data['response']
-                            console.print(f"[bright_green]{response}[/bright_green]")
+                            render_response(response)
                         elif node_data.get("error"):
-                            if not is_parallel_node:
+                            if not is_parallel_node and not should_hide:
                                 console.print()
                             console.print(f"[bold red]Error: {node_data['error']}[/bold red]")
-                        elif not is_parallel_node:
-                            console.print("[dim]processing...[/dim]")
-                    elif not is_parallel_node:
-                        console.print("[dim]processing...[/dim]")
+                        elif not is_parallel_node and not should_hide:
+                            # Just print newline if no response/error (node is processing)
+                            console.print()
+                    elif not is_parallel_node and not should_hide:
+                        # Just print newline if node_data is not a dict
+                        console.print()
                 
                 # If interrupted, we handled the rest in the loop above
                 if interrupted:
                     break
             
-            if not interrupted:
-                console.print()
-        
-        except KeyboardInterrupt:
-            console.print("\n\n[yellow]⏸️  Interrupted! Checkpoint saved.[/yellow]")
-            console.print("[dim]Your progress is saved. Continue typing to resume, or press Ctrl+C again to quit.[/dim]")
-            # Stay in the loop - don't break!
-            # Next message will resume from checkpoint
-        
-        except Exception as e:
-            console.print(f"[bold red]Error: {e}[/bold red]")
+                if not interrupted:
+                    console.print()
+            
+            except KeyboardInterrupt:
+                console.print("\n\n[yellow]⏸️  Interrupted! Checkpoint saved.[/yellow]")
+                console.print("[dim]Your progress is saved. Continue typing to resume, or press Ctrl+C again to quit.[/dim]")
+                # Stay in the loop - don't break!
+                # Next message will resume from checkpoint
+            
+            except Exception as e:
+                console.print(f"[bold red]Error: {e}[/bold red]")
+    finally:
+        # Cleanup: close database connection
+        await close_agent_graph()
 
 
 def main():
     """Sync wrapper for async main function."""
-    asyncio.run(async_main())
+    try:
+        asyncio.run(async_main())
+    except KeyboardInterrupt:
+        # Handle Ctrl+C gracefully
+        pass
 
 
 if __name__ == "__main__":

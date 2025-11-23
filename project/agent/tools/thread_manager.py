@@ -24,7 +24,9 @@ class ThreadManager:
         """Initialize thread manager with SQLite database."""
         # Use absolute path to ensure it works regardless of current working directory
         if db_path is None:
-            db_path = str(Path.cwd() / "project" / "data" / "threads.db")
+            # Find project directory (where agent folder is located)
+            project_dir = Path(__file__).parent.parent.parent  # tools -> agent -> project/
+            db_path = str(project_dir / "data" / "threads.db")
         self.db_path = db_path
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._init_db()

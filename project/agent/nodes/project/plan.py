@@ -1,4 +1,5 @@
 import json
+import time
 from typing import Dict
 
 from agent.state import AgentState
@@ -31,7 +32,10 @@ Guidelines:
 - Include all necessary files for the request
 - Use appropriate file extensions
 - Create folder structure as needed
-- Make descriptions specific and actionable"""
+- Make descriptions specific and actionable
+- If creating a README.md, make the description VERY SPECIFIC about the project's actual purpose, features, and files
+- README descriptions should reference what the user actually requested, not generic template content
+- For README files, include details like: project name, what it does, key files/modules, usage examples based on the actual request"""
         
         user_prompt = f"""Plan files for this request:
 {project_instruction}
@@ -45,8 +49,12 @@ Return JSON with all files needed:"""
         if not files:
             return {"error": "No files planned"}
         
+        # Track start time for parallel execution timing
+        # Clear accumulated project_results from previous runs
         return {
             "project_files": files,
+            "project_start_time": time.time(),
+            "project_results": ["__CLEAR__"],  # Clear previous results
             "error": ""
         }
         

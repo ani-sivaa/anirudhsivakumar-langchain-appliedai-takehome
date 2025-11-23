@@ -46,17 +46,48 @@ async def chat_about_codebase(state: AgentState) -> Dict:
         2. LLM reads the code
         3. LLM explains: "The graph uses LangGraph's StateGraph..."
     """
-    user_input = state.get("user_input", "")
+    # Use codebase_query if provided (from multi-step tasks), otherwise fall back to user_input
+    query = state.get("codebase_query") or state.get("user_input", "")
 
-    if not user_input:
+    if not query:
         return {
             "response": "No question provided",
             "error": "No user input"
         }
 
     try:
-        # Semantic search for relevant code chunks (increased k for better coverage)
-        results = search_codebase(query=user_input, k=10)
+        # Semantic search for relevant code chunks
+        # Include agent-generated-code to search user-created files
+        from langchain_core.vectorstores import VectorStore
+
+        # Get vector store for similarity search with scores
+        from agent.tools.memory.pinecone_store import get_cached_vector_store, get_pinecone_vector_store
+
+        vector_store = get_cached_vector_store(namespace="codebase")
+        results_with_scores = vector_store.similarity_search_with_relevance_scores(query, k=15)
+
+        # Also search agent-generated-code if needed
+        agent_results_with_scores = []
+        try:
+            agent_store = get_pinecone_vector_store(namespace="agent-generated-code")
+            agent_results_with_scores = agent_store.similarity_search_with_relevance_scores(query, k=10)
+        except:
+            pass
+
+        # Combine and sort by relevance score
+        all_results = results_with_scores + agent_results_with_scores
+        all_results.sort(key=lambda x: x[1], reverse=True)
+
+        # Filter by relevance threshold (0.7 for semantic similarity)
+        # Higher scores = more relevant
+        filtered_results = [(doc, score) for doc, score in all_results if score > 0.7]
+
+        # If no high-quality results, lower threshold slightly
+        if not filtered_results:
+            filtered_results = [(doc, score) for doc, score in all_results if score > 0.6]
+
+        # Take top 8 most relevant chunks
+        results = [doc for doc, score in filtered_results[:8]]
 
         if not results:
             response = "No relevant code found.\n\n"
@@ -68,74 +99,109 @@ async def chat_about_codebase(state: AgentState) -> Dict:
                 "messages": [{"role": "assistant", "content": response}]
             }
 
-        # Build context from retrieved documents
-        context_parts = ["Here are the relevant code chunks:\n"]
+        # Build context from retrieved documents with better organization
+        context_parts = []
 
-        for i, doc in enumerate(results, 1):
+        # Group results by file for better context
+        files_dict = {}
+        for doc in results:
             path = doc.metadata.get('path', 'unknown')
-            chunk_type = doc.metadata.get('chunk_type', 'unknown')
-            name = doc.metadata.get('name', '')
-            content = doc.page_content
+            if path not in files_dict:
+                files_dict[path] = []
+            files_dict[path].append(doc)
 
-            # Build rich header based on chunk type
-            if chunk_type == 'function':
-                args = doc.metadata.get('args', [])
-                calls = doc.metadata.get('calls', [])
-                header = f"\n--- Chunk {i}: Function `{name}({', '.join(args)})` in {path} ---"
-                if calls:
-                    header += f"\n    Calls: {', '.join(calls[:5])}"
-            elif chunk_type == 'class':
-                methods = doc.metadata.get('methods', [])
-                header = f"\n--- Chunk {i}: Class `{name}` in {path} ---"
-                if methods:
-                    header += f"\n    Methods: {', '.join(methods[:10])}"
-            elif chunk_type == 'module':
-                imports = doc.metadata.get('imports', [])
-                header = f"\n--- Chunk {i}: Module-level code in {path} ---"
-                if imports:
-                    header += f"\n    Imports: {', '.join(imports[:5])}"
-            else:
-                header = f"\n--- Chunk {i}: {path} ---"
-            
-            context_parts.append(header)
+        # Build organized context
+        for file_path, docs in files_dict.items():
+            context_parts.append(f"\n{'='*80}")
+            context_parts.append(f"FILE: {file_path}")
+            context_parts.append(f"{'='*80}\n")
 
-            # Increase truncation limit significantly (most functions fit in 4000 chars)
-            if len(content) > 4000:
-                content = content[:4000] + "\n... (truncated)"
+            for doc in docs:
+                chunk_type = doc.metadata.get('chunk_type', 'unknown')
+                name = doc.metadata.get('name', '')
+                content = doc.page_content
 
-            context_parts.append(content)
+                # Build rich header based on chunk type
+                if chunk_type == 'function':
+                    args = doc.metadata.get('args', [])
+                    start_line = doc.metadata.get('start_line', '?')
+                    header = f"\n## Function: `{name}({', '.join(args)})` (line {start_line})"
+                    docstring = doc.metadata.get('docstring', '')
+                    if docstring:
+                        header += f"\n**Purpose:** {docstring[:150]}"
+                elif chunk_type == 'class':
+                    methods = doc.metadata.get('methods', [])
+                    start_line = doc.metadata.get('start_line', '?')
+                    header = f"\n## Class: `{name}` (line {start_line})"
+                    if methods:
+                        header += f"\n**Methods:** {', '.join(methods[:10])}"
+                    docstring = doc.metadata.get('docstring', '')
+                    if docstring:
+                        header += f"\n**Purpose:** {docstring[:150]}"
+                elif chunk_type == 'module':
+                    imports = doc.metadata.get('imports', [])
+                    header = f"\n## Module-level code"
+                    if imports:
+                        header += f"\n**Imports:** {', '.join(imports[:5])}"
+                else:
+                    header = f"\n## Code Section"
+
+                context_parts.append(header)
+                context_parts.append("\n```python")
+
+                # Don't truncate - show full content for better understanding
+                # Limit is already enforced by chunking strategy
+                context_parts.append(content[:5000])  # Increased limit
+                context_parts.append("```\n")
 
         context = "\n".join(context_parts)
 
         # Generate answer using LLM
-        llm = get_llm(temperature=0.2)
+        llm = get_llm(temperature=0.3)  # Slightly higher for better explanations
 
-        system_prompt = """You are a helpful coding assistant that explains codebases.
+        system_prompt = """You are an expert code analyst that provides clear, well-structured explanations of codebases.
 
-You have been provided with relevant code chunks (functions, classes, modules) from a codebase.
-Each chunk shows a specific function or class, making it easy to find exact implementations.
+**Your Output Format:**
 
-Your job is to answer the user's question based on the code you see.
+Always structure your response using this markdown format:
 
-Be specific and reference:
-- Function/class names
-- File paths
-- Line numbers if available
-- Actual code snippets when explaining
+# Overview
+[Provide a 2-3 sentence high-level summary answering the user's question]
 
-If you see the exact answer in a function, point to it directly.
-If the code doesn't fully answer the question, say so and explain what you can see.
+# Key Components
+[Break down the relevant functions/classes/modules with clear explanations]
+- Use bullet points or numbered lists
+- Reference specific file paths and line numbers
+- Explain what each component does and how they relate
 
-Keep your explanation clear and concise."""
+# Implementation Details
+[Dive into important code snippets, logic, or design patterns]
+- Quote relevant code sections
+- Explain the "why" not just the "what"
+- Highlight any interesting patterns or techniques
 
-        user_prompt = f"""Based on these code chunks from the codebase:
+# Summary
+[Conclude with a brief synthesis that directly answers the user's question]
+
+**Guidelines:**
+- Use proper markdown formatting (headers, code blocks, lists, bold/italic)
+- Reference specific locations: `function_name()` in `path/to/file.py:123`
+- Show code snippets in backticks or code blocks
+- Connect the pieces - explain how components work together
+- Be clear and concise - avoid unnecessary verbosity
+- If the code doesn't fully answer the question, explicitly state what's missing"""
+
+        user_prompt = f"""Based on the following code from the codebase, please answer the user's question.
+
+The code has been organized by file for better context. Each section shows relevant functions, classes, or modules.
 
 {context}
 
----
+{'='*80}
+**User's Question:** {query}
+{'='*80}
 
-Please answer this question:
-{user_input}"""
+Please provide a well-structured, comprehensive answer following the format specified in your system prompt."""
 
         response = await llm.ainvoke(prompt=user_prompt, system_prompt=system_prompt)
 

@@ -5,7 +5,13 @@ from agent.state import AgentState
 from agent.tools.path.resolver import resolve_path
 
 
-WORKSPACE_ROOT = Path.cwd()
+# Find workspace root by going up from agent code location
+# This file is at: project/agent/nodes/file_ops/read.py
+# So workspace root is: project/agent/nodes/file_ops/../../../../../ = workspace root
+# Use resolve() to get absolute path, then go up 5 levels
+# Path breakdown: read.py -> file_ops/ -> nodes/ -> agent/ -> project/ -> workspace_root
+_THIS_FILE = Path(__file__).resolve()
+WORKSPACE_ROOT = _THIS_FILE.parent.parent.parent.parent.parent  # Go up 5 levels to get workspace root
 PROJECT_FOLDER = WORKSPACE_ROOT / "project"
 AGENT_GENERATED_CODE_FOLDER = WORKSPACE_ROOT / "agent-generated-code"
 
@@ -16,14 +22,20 @@ def validate_path(path: str) -> tuple[bool, str]:
     Blocks edits outside of agent-generated-code and within the project folder.
     """
     try:
-        file_path = Path(path).resolve()
-        
+        # Resolve path relative to WORKSPACE_ROOT, not current working directory
+        # This prevents relative paths from being resolved incorrectly when CWD is project/
+        if Path(path).is_absolute():
+            file_path = Path(path)
+        else:
+            file_path = WORKSPACE_ROOT / path
+        file_path = file_path.resolve()
+
         # Check if path is within workspace
         try:
             file_path.relative_to(WORKSPACE_ROOT)
         except ValueError:
             return False, f"Access denied: {path} is outside workspace"
-        
+
         # Block edits within the project folder
         try:
             file_path.relative_to(PROJECT_FOLDER)
@@ -31,14 +43,14 @@ def validate_path(path: str) -> tuple[bool, str]:
         except ValueError:
             # Path is not within project folder, which is good
             pass
-        
+
         # Only allow edits within agent-generated-code folder
         try:
             file_path.relative_to(AGENT_GENERATED_CODE_FOLDER)
             # Path is within agent-generated-code folder, which is allowed
         except ValueError:
             return False, f"Access denied: {path} must be within the agent-generated-code folder. All file operations are restricted to agent-generated-code/"
-        
+
         return True, ""
     except Exception as e:
         return False, f"Invalid path: {str(e)}"
@@ -50,20 +62,41 @@ def read_file(state: AgentState) -> Dict:
     Used in the single-file edit flow.
 
     Includes fuzzy path matching to handle typos automatically.
+    All files are automatically read from agent-generated-code/ folder.
     """
     path = state.get("path", "")
 
     if not path:
         return {"error": "No file path specified"}
 
-    # Try to resolve typos in the path
-    resolved_path, suggestion = resolve_path(path, auto_correct=True)
+    # Normalize path to ensure it goes to agent-generated-code/
+    # Remove any leading slashes or dots, but preserve folder structure
+    normalized_path = path.lstrip('/').lstrip('./')
+    
+    # If path is absolute, try to extract relative part
+    if Path(path).is_absolute():
+        try:
+            normalized_path = str(Path(path).relative_to(WORKSPACE_ROOT))
+        except ValueError:
+            normalized_path = Path(path).name
+    
+    # Remove agent-generated-code prefix if already present (avoid duplication)
+    if normalized_path.startswith("agent-generated-code/"):
+        normalized_path = normalized_path[len("agent-generated-code/"):]
+    
+    # Always prepend agent-generated-code to ensure files are read from there
+    final_path = f"agent-generated-code/{normalized_path}"
+    
+    # Try to resolve typos in the normalized path
+    resolved_path, suggestion = resolve_path(final_path, auto_correct=True)
 
     # If path was corrected, use the corrected version
     if suggestion:
         # Update state with corrected path so downstream nodes use it
         state["path"] = resolved_path
         path = resolved_path
+    else:
+        path = final_path
 
     is_valid, error_msg = validate_path(path)
     if not is_valid:
@@ -79,14 +112,12 @@ def read_file(state: AgentState) -> Dict:
         file_path = file_path.resolve()
 
         if not file_path.exists():
-            # If still not found after correction, give helpful error
-            rel_path = path if not Path(path).is_absolute() else str(Path(path).relative_to(WORKSPACE_ROOT))
-            error = f"File not found: {rel_path}"
-            if suggestion:
-                error += f"\n{suggestion}"
-            return {"error": error}
+            # File doesn't exist - this is OK for new file creation
+            # Return empty content so modify_code can create the file
+            return {"content": "", "error": ""}
 
         if not file_path.is_file():
+            # Path exists but it's a directory, not a file
             rel_path = path if not Path(path).is_absolute() else str(Path(path).relative_to(WORKSPACE_ROOT))
             return {"error": f"Not a file: {rel_path}"}
 

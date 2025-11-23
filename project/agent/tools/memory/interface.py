@@ -16,7 +16,9 @@ def get_memory_store() -> Union[InMemoryStore, SQLiteStore]:
         if store_type == "sqlite":
             # Use absolute path to ensure it works regardless of current working directory
             from pathlib import Path
-            default_db_path = Path.cwd() / "project" / "data" / "long_term_memory.db"
+            # Find project directory (where agent folder is located)
+            project_dir = Path(__file__).parent.parent.parent.parent  # interface -> memory -> tools -> agent -> project/
+            default_db_path = project_dir / "data" / "long_term_memory.db"
             db_path = os.getenv("MEMORY_DB_PATH", str(default_db_path))
             _store = SQLiteStore(db_path)
         else:

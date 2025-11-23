@@ -9,6 +9,7 @@ def write_file(state: AgentState) -> Dict:
     """
     Writes the modified content to disk.
     Creates folders if they don't exist.
+    All files are automatically placed in agent-generated-code/ folder.
     """
     path = state.get("path", "")
     content = state.get("modified_content", "")
@@ -16,9 +17,31 @@ def write_file(state: AgentState) -> Dict:
     if not path:
         return {"error": "No file path specified"}
     
-    is_valid, error_msg = validate_path(path)
+    # Normalize path to ensure it goes to agent-generated-code/
+    # Remove any leading slashes or dots, but preserve folder structure
+    normalized_path = path.lstrip('/').lstrip('./')
+    
+    # If path is absolute, try to extract relative part
+    if Path(path).is_absolute():
+        try:
+            normalized_path = str(Path(path).relative_to(WORKSPACE_ROOT))
+        except ValueError:
+            normalized_path = Path(path).name
+    
+    # Remove agent-generated-code prefix if already present (avoid duplication)
+    if normalized_path.startswith("agent-generated-code/"):
+        normalized_path = normalized_path[len("agent-generated-code/"):]
+    
+    # Always prepend agent-generated-code to ensure files go there
+    final_path = f"agent-generated-code/{normalized_path}"
+    
+    # Now validate the normalized path
+    is_valid, error_msg = validate_path(final_path)
     if not is_valid:
         return {"error": error_msg}
+    
+    # Use the normalized path
+    path = final_path
     
     try:
         # Ensure agent-generated-code folder exists

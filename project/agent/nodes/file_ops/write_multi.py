@@ -10,6 +10,7 @@ def write_file_multi(state: AgentState) -> Dict:
     """
     Writes one file when editing multiple files in parallel.
     Each instance writes its file and adds a result like "SUCCESS: file.py" to the list.
+    All files are automatically placed in agent-generated-code/ folder.
     """
     path = state.get("path", "")
     modifications = state.get("modifications", {})
@@ -17,9 +18,31 @@ def write_file_multi(state: AgentState) -> Dict:
     if not path:
         return {"edit_results": [f"FAIL: Unknown - No path"]}
 
-    is_valid, error_msg = validate_path(path)
+    # Normalize path to ensure it goes to agent-generated-code/
+    # Remove any leading slashes or dots, but preserve folder structure
+    normalized_path = path.lstrip('/').lstrip('./')
+    
+    # If path is absolute, try to extract relative part
+    if Path(path).is_absolute():
+        try:
+            normalized_path = str(Path(path).relative_to(WORKSPACE_ROOT))
+        except ValueError:
+            normalized_path = Path(path).name
+    
+    # Remove agent-generated-code prefix if already present (avoid duplication)
+    if normalized_path.startswith("agent-generated-code/"):
+        normalized_path = normalized_path[len("agent-generated-code/"):]
+    
+    # Always prepend agent-generated-code to ensure files go there
+    final_path = f"agent-generated-code/{normalized_path}"
+    
+    # Now validate the normalized path
+    is_valid, error_msg = validate_path(final_path)
     if not is_valid:
         return {"edit_results": [f"FAIL: {path} - {error_msg}"]}
+    
+    # Use the normalized path
+    path = final_path
 
     if not modifications:
         return {"edit_results": [f"FAIL: {path} - modifications is empty/None"]}

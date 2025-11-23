@@ -5,7 +5,7 @@ from langgraph.types import Send
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from agent.state import AgentState
-from agent.nodes.routing.intent import determine_intent
+from agent.nodes.routing.intent import determine_intent, route_task_queue
 from agent.nodes.routing.approval import check_approval_needed, request_approval, route_approval, route_after_approval, handle_denial
 from agent.nodes.chat.response import chat_response
 from agent.nodes.file_ops.read import read_file
@@ -33,7 +33,8 @@ from agent.tools.memory.interface import get_memory_store
 def fan_out_project_files(state: AgentState):
     """Creates parallel create_file instances - one per planned file."""
     files = state.get("project_files", [])
-    return [Send("create_file", {"file_path": f["path"], "file_description": f["description"]}) for f in files]
+    project_instruction = state.get("project_instruction", state.get("user_input", ""))
+    return [Send("create_file", {"file_path": f["path"], "file_description": f["description"], "project_instruction": project_instruction}) for f in files]
 
 
 def fan_out_read_multi(state: AgentState):
@@ -46,34 +47,33 @@ def fan_out_read_multi(state: AgentState):
 
 def fan_out_modify_multi(state: AgentState):
     """Creates parallel modify_code_multi instances - one per file."""
-    paths = state.get("paths", [])
     contents = state.get("contents", {})
     instruction = state.get("edit_instruction", "")
-    
-    # Send() needs ALL the data the modify node will need
-    # Can't rely on state being passed through - must include it explicitly
+
+    # Use keys from contents dict (normalized paths) instead of original paths
+    # This ensures the path matches what was returned by read_file_multi
     return [
         Send("modify_code_multi", {
             "path": path,
             "contents": contents,
             "edit_instruction": instruction
-        }) 
-        for path in paths
+        })
+        for path in contents.keys()
     ]
 
 
 def fan_out_write_multi(state: AgentState):
     """Creates parallel write_file_multi instances - one per file."""
-    paths = state.get("paths", [])
     modifications = state.get("modifications", {})
-    
-    # Send() needs the modifications dict so write nodes can access it
+
+    # Use keys from modifications dict (normalized paths) instead of original paths
+    # This ensures the path matches what was returned by modify_code_multi
     return [
         Send("write_file_multi", {
             "path": path,
             "modifications": modifications
-        }) 
-        for path in paths
+        })
+        for path in modifications.keys()
     ]
 
 
@@ -154,18 +154,47 @@ async def create_graph():
         }
     )
     
-    graph.add_edge("chat", END)
-    graph.add_edge("save_memory", END)
-    graph.add_edge("recall_memory", END)
-    graph.add_edge("denied", END)
-    graph.add_edge("project_context", END)
-    graph.add_edge("index_codebase", END)
-    graph.add_edge("ask_codebase", END)
+    # Terminal nodes route through task_router to check for more tasks
+    graph.add_conditional_edges(
+        "chat",
+        route_task_queue,
+        {"continue_tasks": "determine_intent", "end": END}
+    )
+    graph.add_conditional_edges(
+        "save_memory",
+        route_task_queue,
+        {"continue_tasks": "determine_intent", "end": END}
+    )
+    graph.add_conditional_edges(
+        "recall_memory",
+        route_task_queue,
+        {"continue_tasks": "determine_intent", "end": END}
+    )
+    graph.add_edge("denied", END)  # Denial should end immediately
+    graph.add_conditional_edges(
+        "project_context",
+        route_task_queue,
+        {"continue_tasks": "determine_intent", "end": END}
+    )
+    graph.add_conditional_edges(
+        "index_codebase",
+        route_task_queue,
+        {"continue_tasks": "determine_intent", "end": END}
+    )
+    graph.add_conditional_edges(
+        "ask_codebase",
+        route_task_queue,
+        {"continue_tasks": "determine_intent", "end": END}
+    )
     
     graph.add_edge("read_file", "modify_code")
     graph.add_edge("modify_code", "write_file")
     graph.add_edge("write_file", "auto_memory")
-    graph.add_edge("auto_memory", END)
+    graph.add_conditional_edges(
+        "auto_memory",
+        route_task_queue,
+        {"continue_tasks": "determine_intent", "end": END}
+    )
     
     # Multi-file edit: single fan-out per stage, not per node
     graph.add_conditional_edges("edit_multi", fan_out_read_multi, ["read_file_multi"])
@@ -174,23 +203,30 @@ async def create_graph():
     graph.add_edge("modify_code_multi", "edit_multi_write")  # Collect all modifies first
     graph.add_conditional_edges("edit_multi_write", fan_out_write_multi, ["write_file_multi"])
     graph.add_edge("write_file_multi", "summarize_multi_edit")
-    graph.add_edge("summarize_multi_edit", "auto_memory")
-    graph.add_edge("auto_memory", END)
-    
+    graph.add_edge("summarize_multi_edit", "auto_memory")  # Routes through auto_memory's conditional edge
+
     graph.add_conditional_edges("plan_project", fan_out_project_files, ["create_file"])
     graph.add_edge("create_file", "collect_project_files")  # Collect all creates first
     graph.add_edge("collect_project_files", "summarize_project")  # Then summarize once
-    graph.add_edge("summarize_project", "auto_memory")
-    graph.add_edge("auto_memory", END)
+    graph.add_edge("summarize_project", "auto_memory")  # Routes through auto_memory's conditional edge
     
     # Auto-heal loop: shell → (check if retry needed) → prepare_retry → install → shell (retry)
     def route_shell_result(state: AgentState) -> str:
-        """Decides whether to retry shell command with package install or end."""
+        """Decides whether to retry shell command with package install or check for more tasks."""
         if should_retry_with_install(state):
             return "prepare_retry"
-        return "end_shell"
-    
-    graph.add_conditional_edges("shell", route_shell_result, {"prepare_retry": "prepare_retry", "end_shell": END})
+        # Check if there are more tasks in queue
+        return route_task_queue(state)
+
+    graph.add_conditional_edges(
+        "shell",
+        route_shell_result,
+        {
+            "prepare_retry": "prepare_retry",
+            "continue_tasks": "determine_intent",
+            "end": END
+        }
+    )
     graph.add_edge("prepare_retry", "install")
     graph.add_edge("install", "shell")  # Retry the command after install
     
@@ -204,15 +240,44 @@ async def create_graph():
     conn = await aiosqlite.connect(str(checkpoints_db_path))
     checkpointer = AsyncSqliteSaver(conn)
     store = get_memory_store()
-    return graph.compile(checkpointer=checkpointer, store=store)
+    compiled_graph = graph.compile(checkpointer=checkpointer, store=store)
+    # Return both the graph and connection so we can close it later
+    return compiled_graph, conn
 
 
 # Graph will be created lazily on first use
 _agent_graph = None
+_db_connection = None
+
 
 async def get_agent_graph():
     """Get or create the agent graph (async)."""
-    global _agent_graph
+    global _agent_graph, _db_connection
     if _agent_graph is None:
-        _agent_graph = await create_graph()
+        _agent_graph, _db_connection = await create_graph()
     return _agent_graph
+
+
+async def close_agent_graph():
+    """Close the database connection and cleanup resources.
+    
+    Handles the case where the event loop may be closing or closed.
+    If the event loop is already closed, the connection will be cleaned up by Python.
+    """
+    global _db_connection
+    if _db_connection:
+        try:
+            # Try to close gracefully
+            await _db_connection.close()
+        except RuntimeError:
+            # Event loop is closed or not available - this is expected during shutdown
+            # The connection will be cleaned up by Python's garbage collector
+            pass
+        except Exception as e:
+            # Any other error - log but don't fail (connection will be cleaned up anyway)
+            import sys
+            # Only log if it's not a "loop closed" error
+            if "closed" not in str(e).lower():
+                print(f"Warning: Error closing database connection: {e}", file=sys.stderr, flush=True)
+        finally:
+            _db_connection = None
