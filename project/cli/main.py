@@ -488,7 +488,7 @@ async def async_main():
                                         # Skip any __interrupt__ events in resume - they're already handled
                                         if resume_node_name == "__interrupt__":
                                             continue
-                                        
+
                                         # Track start time for parallel execution verification
                                         start_time = datetime.now()
                                         node_start_times[resume_node_name] = start_time
@@ -520,6 +520,12 @@ async def async_main():
                                                 console.print()
                                         elif not is_parallel_node and not should_hide:
                                             console.print()
+
+                                # After fully resuming and completing, break out of the main stream loop
+                                # to avoid processing stale events from the original stream
+                                break
+
+                            # If we processed an interrupt, break out of the event items loop
                             break
                     
                     # Normal node execution
@@ -565,13 +571,15 @@ async def async_main():
                     elif not is_parallel_node and not should_hide:
                         # Just print newline if node_data is not a dict
                         console.print()
-                
-                # If interrupted, we handled the rest in the loop above
-                if interrupted:
-                    break
-            
-                if not interrupted:
-                    console.print()
+
+                    # After processing each node in normal execution, check if we need to exit
+                    # This handles the case where an interrupt was processed in a previous iteration
+                    if interrupted:
+                        break
+
+                # If interrupted, it was already handled in the loop above
+                # No need to break out of the REPL - continue to next user input
+                console.print()
             
             except KeyboardInterrupt:
                 console.print("\n\n[yellow]⏸️  Interrupted! Checkpoint saved.[/yellow]")

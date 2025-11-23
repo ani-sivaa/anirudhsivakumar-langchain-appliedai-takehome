@@ -1,4 +1,5 @@
 import json
+import os
 from typing import Dict
 
 from agent.state import AgentState
@@ -105,6 +106,13 @@ Use "project" for:
 Use "shell" for:
 - Command execution requests
 - "run", "execute", "ls", "grep" or other shell commands
+- IMPORTANT for shell commands: Always construct paths relative to the provided current working directory
+- If a folder/file is mentioned that's not in cwd, check if it exists in parent directory (../)
+- CRITICAL: Always quote paths that contain spaces using double quotes
+- Examples:
+  - If cwd is "/project" and user says "delete power folder" but power exists at "/agent-generated-code/power", use "../agent-generated-code/power"
+  - If deleting "power ranger" folder (with space), use: rm -rf "power ranger" NOT rm -rf power ranger
+  - Always verify path logic before constructing rm, mv, cp commands
 
 Use "install" for:
 - Installing Python packages
@@ -203,13 +211,35 @@ IMPORTANT:
                 if len(content) > 300 and not any(marker in content for marker in ['.py', '.md', '.js', 'Created', '✓']):
                     content = content[:300] + "..."
                 context_lines.append(f"{role}: {content}")
-        
+
         context_str = "\n".join(context_lines) if context_lines else "No previous context"
-        
-        user_prompt = f"""Recent conversation context:
+
+        # Get current working directory for path resolution
+        cwd = os.getcwd()
+
+        # Get project memory if available (for project structure awareness)
+        project_memory = state.get("project_memory", {})
+        project_files = project_memory.get("files", []) if project_memory else []
+
+        # Build project context string
+        project_context = ""
+        if project_files:
+            project_context = f"\n\nKnown project files:\n" + "\n".join(f"- {f}" for f in project_files[:20])  # Limit to 20 files
+            if len(project_files) > 20:
+                project_context += f"\n... and {len(project_files) - 20} more files"
+
+        user_prompt = f"""Current working directory: {cwd}
+{project_context}
+
+Recent conversation context:
 {context_str}
 
 Current user request: {user_input}
+
+IMPORTANT: When constructing shell commands with file/folder paths:
+1. Check if the path exists in the known project files above
+2. If the user mentions a folder/file that's not in the current directory, check if it might be in the parent directory (../)
+3. Use the correct relative path based on the current working directory: {cwd}
 
 Classify the intent and extract parameters as JSON:"""
 
