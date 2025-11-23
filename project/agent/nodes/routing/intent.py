@@ -1,0 +1,247 @@
+import json
+from typing import Dict
+
+from agent.state import AgentState
+from agent.tools.llm.wrapper import get_llm
+from agent.tools.parsing.json import safe_json_parse
+
+
+async def determine_intent(state: AgentState) -> Dict:
+    """
+    Figures out what the user wants using an LLM.
+    Takes the user's message + recent conversation and classifies it into an action.
+    Returns stuff like action='edit', path='utils.py', edit_instruction='add type hints'.
+    """
+    user_input = state.get("user_input", "")
+    messages = state.get("messages", [])
+    
+    if not user_input:
+        return {"error": "No user input provided"}
+    
+    try:
+        llm = get_llm(temperature=0.0)
+        
+        system_prompt = """You are an intent classifier for a coding agent. Analyze the user's request and determine the appropriate action.
+
+Available actions:
+- "chat": General conversation, questions, greetings (DEFAULT for non-action queries)
+- "edit": Edit or create a single file
+- "edit_multi": Edit multiple EXISTING files (e.g., "add type hints to utils.py and main.py")
+- "project": Create multiple NEW files (e.g., "create 5 files", "build a website", "scaffold a project")
+- "shell": Run a shell command
+- "install": Install a Python package via pip
+- "remember": Save information to long-term memory
+- "recall": Retrieve information from long-term memory
+- "project_context": Get current project structure and file list from memory
+- "index_codebase": Index the entire codebase for semantic search
+- "ask_codebase": Ask questions about the codebase using semantic search
+
+IMPORTANT: Use "chat" for:
+- Questions (how, what, why, can you, etc.)
+- Greetings (hello, hi, hey)
+- Clarifications
+- General conversation
+- Questions about conversation history or what was done in this thread
+- "what were we working on?", "what did we build?", "what project are we on?"
+
+Use "edit" for:
+- Single file editing or creation
+- "write it to [filename]" or "save it as [filename]" when referring to previously discussed content
+- "edit [filename]" or "create [filename]" (single file)
+- "look at the portfolio folder and style the css" - extract the actual file path like "portfolio/styles/style.css"
+- When user mentions a directory, find the relevant file within it (e.g., "portfolio folder" + "style css" → "portfolio/styles/style.css")
+
+Use "edit_multi" for:
+- Editing multiple existing files with the same instruction
+- "add type hints to utils.py, main.py, and helpers.py"
+- "refactor file1.py and file2.py"
+- "update logging in all these files: a.py, b.py, c.py"
+- "edit all these files" or "edit those files" - IMPORTANT: Look at conversation history to find which files were just mentioned/created
+- "edit all files in [folder]" or "edit all [folder] files" - Use shell command to discover files in that folder (e.g., "find calculator_project -type f -name '*.py'")
+- When user mentions a folder/project name, discover all files in that folder and edit them
+
+Use "project" for:
+- Creating multiple NEW files from scratch
+- "create 5 files", "write multiple files", "build a website"
+- "scaffold a Python project"
+
+Use "shell" for:
+- Command execution requests
+- "run", "execute", "ls", "grep" or other shell commands
+
+Use "install" for:
+- Installing Python packages
+- "install numpy", "pip install requests", "install scikit-learn"
+
+Use "remember" for:
+- Saving user preferences, facts, or project information
+- "remember my name is X", "save that I prefer Y", "remember this project uses Z"
+
+Use "recall" for:
+- Retrieving saved information
+- "what's my name?", "what do I prefer?", "what did I tell you about X?"
+
+Use "project_context" for:
+- Asking about the current project structure (file listing only, not conversation history)
+- "what files exist?", "show me the project structure", "list all files"
+
+Use "index_codebase" for:
+- Indexing the project for semantic search
+- "index the codebase", "index project files", "build codebase index"
+
+Use "ask_codebase" for:
+- Questions about how the codebase works
+- "how does the graph work?", "where is error handling?", "explain the memory system"
+- "what does this project do?", "how is X implemented?"
+- Technical questions about code architecture or implementation
+
+When user says "write it" or "save it", look at conversation history to understand what content they're referring to.
+
+Extract relevant information:
+- For "chat": no additional fields needed
+- For "edit": extract path and edit_instruction (the content or instruction)
+- For "edit_multi": extract paths (array of file paths) and edit_instruction (what to change)
+- For "project": extract project_instruction (full description of what to create)
+- For "shell": extract command (the shell command to run)
+- For "remember": extract memory_key (label) and memory_value (dict of info to save)
+- For "recall": extract memory_key (what to retrieve)
+
+Respond with valid JSON only:
+{
+    "action": "chat|edit|edit_multi|project|shell|install|remember|recall|project_context|index_codebase|ask_codebase",
+    "path": "file path" (for edit),
+    "paths": ["file1.py", "file2.py"] (for edit_multi),
+    "folder_path": "folder_name" (for edit_multi when user says "all files in [folder]"),
+    "edit_instruction": "what to write or change" (for edit or edit_multi),
+    "project_instruction": "full project description" (for project),
+    "command": "shell command" (for shell),
+    "package_to_install": "package name" (for install),
+    "memory_key": "key label" (for remember/recall),
+    "memory_value": {"key": "value"} (for remember)
+}
+
+Examples:
+- "hello" → {"action": "chat"}
+- "what can you do?" → {"action": "chat"}
+- "run ls -la" → {"action": "shell", "command": "ls -la"}
+- "install numpy" → {"action": "install", "package_to_install": "numpy"}
+- "add a fibonacci function to utils.py" → {"action": "edit", "path": "utils.py", "edit_instruction": "add a fibonacci function"}
+- "add type hints to utils.py and main.py" → {"action": "edit_multi", "paths": ["utils.py", "main.py"], "edit_instruction": "add type hints"}
+- "refactor logging in file1.py, file2.py, file3.py" → {"action": "edit_multi", "paths": ["file1.py", "file2.py", "file3.py"], "edit_instruction": "refactor logging"}
+- "edit all these files to say hello" (after creating GOAT/README1.md, GOAT/README2.md...) → {"action": "edit_multi", "paths": ["GOAT/README1.md", "GOAT/README2.md", ...], "edit_instruction": "say hello"}
+- "edit all files in calculator_project to add my name" → {"action": "edit_multi", "folder_path": "calculator_project", "edit_instruction": "add my name Anirudh Sivakumar at the top in a comment"}
+- "edit all calculator project files" → {"action": "edit_multi", "folder_path": "calculator_project", "edit_instruction": "..."}
+- "in the anew folder write 5 readme files" → {"action": "project", "project_instruction": "create 5 readme files with random info in the anew folder"}
+- "create a website with html css" → {"action": "project", "project_instruction": "create a website with html css"}
+- "remember my name is John" → {"action": "remember", "memory_key": "name", "memory_value": {"name": "John"}}
+- "what's my name?" → {"action": "recall", "memory_key": "name"}
+- "what files exist in this project?" → {"action": "project_context"}
+- "show me the project structure" → {"action": "project_context"}
+- "index the codebase" → {"action": "index_codebase"}
+- "how does the graph work?" → {"action": "ask_codebase"}
+- "explain the memory system" → {"action": "ask_codebase"}
+- "where is error handling implemented?" → {"action": "ask_codebase"}
+
+IMPORTANT: 
+- When user says "these files" or "those files" or "all files", look at the recent conversation context to find which specific files they're referring to. Extract the actual file paths from previous messages.
+- When user says "all files in [folder]" or "all [folder] files", you can use a folder_path field to indicate the folder, and the system will discover files automatically. Example: {"action": "edit_multi", "folder_path": "calculator_project", "edit_instruction": "add comment"}
+- If you can't find specific file paths but the user mentions a folder, use folder_path instead of paths."""
+        
+        context_lines = []
+        if messages:
+            # Use more context (8 messages) so we can see file paths from project creation
+            recent_messages = messages[-8:] if len(messages) > 8 else messages
+            for msg in recent_messages:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                # Keep file paths visible - don't truncate if it contains common file extensions or "Created"
+                if len(content) > 300 and not any(marker in content for marker in ['.py', '.md', '.js', 'Created', '✓']):
+                    content = content[:300] + "..."
+                context_lines.append(f"{role}: {content}")
+        
+        context_str = "\n".join(context_lines) if context_lines else "No previous context"
+        
+        user_prompt = f"""Recent conversation context:
+{context_str}
+
+Current user request: {user_input}
+
+Classify the intent and extract parameters as JSON:"""
+
+        response = await llm.ainvoke(prompt=user_prompt, system_prompt=system_prompt)
+        intent_data = safe_json_parse(response, default={"action": "chat"})
+        
+        result = {"action": intent_data.get("action", "chat")}
+        
+        if "path" in intent_data:
+            result["path"] = intent_data["path"]
+        
+        if "paths" in intent_data:
+            result["paths"] = intent_data["paths"]
+        
+        if "folder_path" in intent_data:
+            result["folder_path"] = intent_data["folder_path"]
+        
+        if "edit_instruction" in intent_data:
+            result["edit_instruction"] = intent_data["edit_instruction"]
+        
+        if "command" in intent_data:
+            result["command"] = intent_data["command"]
+        
+        if "base_branch" in intent_data:
+            result["base_branch"] = intent_data["base_branch"]
+        
+        if "head_branch" in intent_data:
+            result["head_branch"] = intent_data["head_branch"]
+        
+        if "memory_key" in intent_data:
+            result["memory_key"] = intent_data["memory_key"]
+        
+        if "memory_value" in intent_data:
+            result["memory_value"] = intent_data["memory_value"]
+        
+        if "project_instruction" in intent_data:
+            result["project_instruction"] = intent_data["project_instruction"]
+        
+        if "package_to_install" in intent_data:
+            result["package_to_install"] = intent_data["package_to_install"]
+        
+        result["error"] = ""
+        return result
+        
+    except json.JSONDecodeError as e:
+        return {"error": f"Failed to parse intent: {str(e)}"}
+    except Exception as e:
+        return {"error": f"Error determining intent: {str(e)}"}
+
+
+def route_action(state: AgentState) -> str:
+    """
+    Simple router - looks at action and returns which node to go to next.
+    Used by the graph's conditional edges to decide the path.
+    """
+    action = state.get("action", "chat")
+    
+    if action == "edit":
+        return "read_file"
+    elif action == "edit_multi":
+        return "edit_multi"
+    elif action == "project":
+        return "project"
+    elif action == "shell":
+        return "shell"
+    elif action == "install":
+        return "install"
+    elif action == "remember":
+        return "remember"
+    elif action == "recall":
+        return "recall"
+    elif action == "project_context":
+        return "project_context"
+    elif action == "index_codebase":
+        return "index_codebase"
+    elif action == "ask_codebase":
+        return "ask_codebase"
+
+    return "chat"
+

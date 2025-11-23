@@ -110,6 +110,6 @@ echo ""
 echo -e "${GREEN}Starting agent...${NC}"
 echo ""
 
-# Run the CLI
-python3 -m cli.main
+# Run the CLI (from project directory)
+cd project && python3 -m cli.main
 

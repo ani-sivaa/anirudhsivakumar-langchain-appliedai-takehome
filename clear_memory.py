@@ -16,16 +16,26 @@ try:
 except ImportError:
     HAS_PINECONE = False
 
+# Use the same database paths as the agent code
+# Data folder is in the project directory
+MEMORY_DB_PATH = os.getenv("MEMORY_DB_PATH", "./project/data/long_term_memory.db")
+THREADS_DB_PATH = os.getenv("THREADS_DB_PATH", "./project/data/threads.db")
+CHECKPOINTS_DB_PATH = os.getenv("CHECKPOINTS_DB_PATH", "./project/data/checkpoints.db")
+
 # Clear SQLite databases
-data_dir = Path("./data")
-if data_dir.exists():
-    for db_file in ["long_term_memory.db", "threads.db", "checkpoints.db"]:
-        db_path = data_dir / db_file
-        if db_path.exists():
-            db_path.unlink()
-            print(f"✓ Deleted {db_file}")
-        else:
-            print(f"  {db_file} not found (already clean)")
+db_files = {
+    "long_term_memory.db": MEMORY_DB_PATH,
+    "threads.db": THREADS_DB_PATH,
+    "checkpoints.db": CHECKPOINTS_DB_PATH,
+}
+
+for db_name, db_path in db_files.items():
+    db_file = Path(db_path)
+    if db_file.exists():
+        db_file.unlink()
+        print(f"✓ Deleted {db_name} ({db_path})")
+    else:
+        print(f"  {db_name} not found at {db_path} (already clean)")
 
 # Clear Pinecone namespace
 if HAS_PINECONE:

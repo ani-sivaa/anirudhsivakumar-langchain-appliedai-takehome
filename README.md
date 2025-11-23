@@ -27,7 +27,8 @@ pip install -r requirements.txt
 # Create .env and add your OPENAI_API_KEY
 echo "OPENAI_API_KEY=your_key_here" > .env
 
-python3 -m cli.main
+# Run from project directory
+cd project && python3 -m cli.main
 ```
 
 ## What It Does
@@ -122,28 +123,46 @@ User Input → determine_intent → check_approval → Route:
 ## Project Structure
 
 ```
-agent/
-  state.py              # State with reducers
-  graph.py              # Graph definition
-  nodes/                # Workflow steps
-  tools/                # Utilities (LLM, memory, validation)
-cli/
-  main.py             # Interactive REPL
-tests/                # Unit tests
-evals/                # Integration tests
+project/
+  agent/
+    state.py              # State with reducers
+    graph.py              # Graph definition
+    nodes/                # Workflow steps (organized by category)
+      routing/            # Intent classification, approval routing
+      chat/              # Chat responses
+      file_ops/          # Read/write operations
+      modify/            # Code modification
+      multi_file/        # Multi-file edit orchestration
+      project/           # Project creation
+      memory/            # Memory save/recall
+      codebase/          # Codebase indexing and search
+      system/            # Shell commands, package installation
+    tools/               # Utilities (organized by category)
+      llm/               # LLM wrapper
+      memory/            # Memory stores (SQLite, Pinecone)
+      code/              # Codebase indexing
+      parsing/           # JSON parsing
+      validation/        # Syntax validation
+      path/              # Path resolution
+      interrupts/        # Safety checks
+  cli/
+    main.py              # Interactive REPL
+  tests/                 # Unit tests
+  evals/                 # Integration tests
+agent-generated-code/   # Output directory (agent writes files here)
 ```
 
 ## Running Tests
 
 ```bash
-# Unit tests
-pytest tests/ -v
+# Unit tests (from project directory)
+cd project && pytest agent/tests/ -v
 
 # Integration tests (comprehensive eval suite)
-pytest evals/ -v
+cd project && pytest evals/ -v
 
 # Run specific eval
-pytest evals/test_architecture_core.py -v
+cd project && pytest evals/test_architecture_core.py -v
 ```
 
 
